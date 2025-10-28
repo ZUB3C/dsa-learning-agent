@@ -1,0 +1,102 @@
+[project]
+name = "dsa-learning-agent"
+version = "0.1.0"
+description = "dsa-learning-agent"
+requires-python = ">=3.13"
+dependencies = [
+    "chromadb>=1.2.2",
+    "fastapi>=0.120.1",
+    "langchain>=1.0.2",
+    "langchain-community>=0.4.1",
+    "langchain-openai>=1.0.1",
+    "langchain-text-splitters>=1.0.0",
+    "pydantic>=2.12.3",
+    "pydantic-settings>=2.11.0",
+    "pymupdf>=1.26.5",
+    "python-multipart>=0.0.20",
+    "sentence-transformers>=5.1.2",
+    "uvicorn>=0.38.0",
+]
+[dependency-groups]
+dev = [
+    "basedpyright>=1.17.1",
+    "ruff>=0.7.1",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+target-version = "py313"
+line-length = 99
+preview = true
+exclude = [
+    ".git",
+    ".venv",
+    ".idea",
+    ".tests",
+    ".cache",
+    "build",
+    "dist",
+    "experiments",
+    "logs"
+]
+
+[tool.ruff.lint]
+select = [
+    "ALL",
+]
+ignore = [
+    "ANN401", # allow Any as type annotation
+    "COM812", # conflict with formatter
+    "CPY", # no copyright statements
+    "D", # ignore documentation for now
+    "DOC", # ignore documentation for now
+    "D203", # `one-blank-line-before-class` (D203) and `no-blank-line-before-class` (D211) are incompatible
+    "D212", # `multi-line-summary-first-line` (D212) and `multi-line-summary-second-line` (D213) are incompatible
+    "ERA", # commented-out code
+    "ISC001", # conflict with formatter
+    "INP001", # no implicit namespace
+    "PLR0914", # too many local variables
+    "PLR0917", # too many positional arguments
+    "T201", # using print is alright
+    "RUF006", # store a reference to the return value of `asyncio.create_task`
+    "S311", # standard pseudo-random generators are not suitable for cryptographic purposes
+    "TRY003", # avoid specifying long messages outside the exception class
+    "EM102", # exception must not use an f-string literal, assign to variable first
+    "BLE001", # allow catchign blind exception: `Exception`
+    #    "ASYNC109",
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    #    "ANN201", # return type hints
+    #    "ANN001",
+    "TID252",
+    "TD", # TODO
+    "FIX002", # TODO
+
+    "ARG001",
+    "B904",
+    "G004",
+    "FBT001", # allow boolean-typed positional argument in function definition
+    "FBT002", # "alow boolean default positional argument in function definition
+    "TRY401",
+]
+
+[tool.basedpyright]
+exclude = [
+    ".git",
+    ".venv",
+    ".idea",
+    ".tests",
+    ".cache",
+    "build",
+    "dist",
+    "scripts",
+    "fastapi_llm_demo"
+]
+typeCheckingMode = "standard"
+pythonPlatform = "All"
+pythonVersion = "3.13"
+reportMissingImports = true
+reportMissingTypeStubs = true
