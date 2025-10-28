@@ -1,8 +1,10 @@
+import json
 import uuid
 from typing import Any
 
 from fastapi import APIRouter
 
+from ..core.database import get_db_connection, get_or_create_user
 from ..models.schemas import (
     AssessmentQuestion,
     AssessmentStartRequest,
@@ -68,6 +70,8 @@ ASSESSMENT_QUESTIONS = [
 async def start_assessment(request: AssessmentStartRequest) -> AssessmentStartResponse:
     """Начать первичное тестирование"""
 
+    get_or_create_user(request.user_id)
+
     session_id = str(uuid.uuid4())
 
     questions = [
@@ -79,7 +83,13 @@ async def start_assessment(request: AssessmentStartRequest) -> AssessmentStartRe
         for q in ASSESSMENT_QUESTIONS
     ]
 
-    # TODO: Сохранить сессию в БД/кеше
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """INSERT INTO assessment_sessions (session_id, user_id, questions)
+               VALUES (?, ?, ?)""",
+            (session_id, request.user_id, json.dumps(ASSESSMENT_QUESTIONS))
+        )
 
     return AssessmentStartResponse(
         test_questions=questions,
@@ -91,9 +101,21 @@ async def start_assessment(request: AssessmentStartRequest) -> AssessmentStartRe
 async def submit_assessment(request: AssessmentSubmitRequest) -> AssessmentSubmitResponse:
     """Отправить результаты тестирования"""
 
-    # TODO: Получить вопросы из БД по session_id
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT user_id, questions FROM assessment_sessions WHERE session_id = ?",
+            (request.session_id,)
+        )
+        session = cursor.fetchone()
 
-    # Подсчет правильных ответов
+        if not session:
+            questions = ASSESSMENT_QUESTIONS
+            user_id = "unknown"
+        else:
+            user_id = session["user_id"]
+            questions = json.loads(session["questions"])
+
     correct_count = 0
     topic_scores: dict[str, list[int]] = {}
 
@@ -101,8 +123,7 @@ async def submit_assessment(request: AssessmentSubmitRequest) -> AssessmentSubmi
         question_id = answer.get("question_id")
         user_answer = answer.get("answer")
 
-        # Находим вопрос
-        question = next((q for q in ASSESSMENT_QUESTIONS if q["question_id"] == question_id), None)
+        question = next((q for q in questions if q["question_id"] == question_id), None)
         if not question:
             continue
 
@@ -115,8 +136,7 @@ async def submit_assessment(request: AssessmentSubmitRequest) -> AssessmentSubmi
             topic_scores[topic] = []
         topic_scores[topic].append(1 if is_correct else 0)
 
-    # Определение уровня
-    percentage = (correct_count / len(ASSESSMENT_QUESTIONS)) * 100
+    percentage = (correct_count / len(questions)) * 100
 
     if percentage >= 80:
         level = "advanced"
@@ -125,20 +145,43 @@ async def submit_assessment(request: AssessmentSubmitRequest) -> AssessmentSubmi
     else:
         level = "beginner"
 
-    # Подсчет по темам
     knowledge_areas = {
         topic: sum(scores) / len(scores) * 100
         for topic, scores in topic_scores.items()
     }
 
-    # Рекомендации
     recommendations = []
     if level == "beginner":
-        recommendations.extend(("Рекомендуется начать с основ: временная и пространственная сложность", "Изучите базовые структуры данных: массивы, списки, стеки, очереди"))
+        recommendations.extend([
+            "Рекомендуется начать с основ: временная и пространственная сложность",
+            "Изучите базовые структуры данных: массивы, списки, стеки, очереди"
+        ])
     elif level == "intermediate":
-        recommendations.extend(("Углубите знания по сложным структурам данных: деревья, графы, хеш-таблицы", "Практикуйтесь в решении алгоритмических задач средней сложности"))
+        recommendations.extend([
+            "Углубите знания по сложным структурам данных: деревья, графы, хеш-таблицы",
+            "Практикуйтесь в решении алгоритмических задач средней сложности"
+        ])
     else:
-        recommendations.extend(("Переходите к продвинутым темам: динамическое программирование, жадные алгоритмы", "Решайте сложные задачи и участвуйте в соревнованиях по программированию"))
+        recommendations.extend([
+            "Переходите к продвинутым темам: динамическое программирование, жадные алгоритмы",
+            "Решайте сложные задачи и участвуйте в соревнованиях по программированию"
+        ])
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """INSERT INTO assessments
+               (user_id, session_id, level, score, knowledge_areas, recommendations)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (
+                user_id,
+                request.session_id,
+                level,
+                percentage,
+                json.dumps(knowledge_areas),
+                json.dumps(recommendations)
+            )
+        )
 
     return AssessmentSubmitResponse(
         level=level,
@@ -150,8 +193,29 @@ async def submit_assessment(request: AssessmentSubmitRequest) -> AssessmentSubmi
 @router.get("/results/{user_id}")
 async def get_assessment_results(user_id: str) -> dict[str, Any]:
     """Получить результаты начальной оценки"""
-    # TODO: Получить из БД
-    return {
-        "initial_level": "intermediate",
-        "completed_at": "2025-10-28T10:00:00Z"
-    }
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT level, score, knowledge_areas, recommendations, completed_at
+               FROM assessments
+               WHERE user_id = ?
+               ORDER BY completed_at DESC
+               LIMIT 1""",
+            (user_id,)
+        )
+        result = cursor.fetchone()
+
+        if not result:
+            return {
+                "message": "No assessment found for this user",
+                "user_id": user_id
+            }
+
+        return {
+            "initial_level": result["level"],
+            "score": result["score"],
+            "knowledge_areas": json.loads(result["knowledge_areas"]) if result["knowledge_areas"] else {},
+            "recommendations": json.loads(result["recommendations"]) if result["recommendations"] else [],
+            "completed_at": result["completed_at"]
+        }
