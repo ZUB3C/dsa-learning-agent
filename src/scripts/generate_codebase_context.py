@@ -1,0 +1,207 @@
+"""
+Script to export all source code from src/ directory to a text file for LLM context.
+Generates directory tree structure followed by file contents.
+Only includes .py files and ignores __pycache__ directories.
+"""
+
+import os
+from pathlib import Path
+
+try:
+    import tiktoken
+
+    TIKTOKEN_AVAILABLE = True
+except ImportError:
+    TIKTOKEN_AVAILABLE = False
+
+
+def generate_tree(
+    directory: Path, prefix: str = "", exclude_path: Path | None = None
+) -> list[str]:
+    """Generate a visual tree structure of the directory."""
+    tree_lines: list[str] = []
+
+    try:
+        # Get all items in directory and sort them
+        items = sorted(Path(directory).iterdir(), key=lambda x: (not x.is_dir(), x.name))
+
+        for index, item in enumerate(items):
+            # Skip __pycache__ directories
+            if item.is_dir() and item.name == "__pycache__":
+                continue
+
+            # Skip non-.py files
+            if item.is_file() and not item.name.endswith(".py"):
+                continue
+
+            is_last_item = index == len(items) - 1
+
+            # Skip the script itself
+            if exclude_path and item.resolve() == exclude_path.resolve():
+                continue
+
+            # Create tree characters
+            connector = "└── " if is_last_item else "├── "
+            tree_lines.append(f"{prefix}{connector}{item.name}")
+
+            # Recursively process directories
+            if item.is_dir():
+                extension = "    " if is_last_item else "│   "
+                subtree = generate_tree(item, prefix + extension, exclude_path)
+                if subtree:  # Only add if directory has .py files
+                    tree_lines.extend(subtree)
+
+    except PermissionError:
+        pass
+
+    return tree_lines
+
+
+def read_all_files(directory: Path, exclude_path: Path | None = None) -> list[dict[str, str]]:
+    """Read all .py files recursively from directory, excluding __pycache__."""
+    file_contents: list[dict[str, str]] = []
+
+    for root, dirs, files in os.walk(directory):
+        # Exclude __pycache__ directories
+        dirs[:] = [d for d in dirs if d != "__pycache__"]
+
+        # Sort for consistent output
+        dirs.sort()
+        files.sort()
+
+        for filename in files:
+            # Only process .py files
+            if not filename.endswith(".py"):
+                continue
+
+            filepath = Path(root) / filename
+
+            # Skip the script itself
+            if exclude_path and filepath.resolve() == exclude_path.resolve():
+                continue
+
+            # Get relative path for cleaner output
+            relative_path = filepath.relative_to(directory.parent)
+
+            try:
+                # Try to read as text file
+                with Path(filepath).open(encoding="utf-8") as f:
+                    content = f.read()
+
+                file_contents.append({"path": str(relative_path), "content": content})
+            except (UnicodeDecodeError, PermissionError):
+                # Skip files that can't be read
+                file_contents.append({
+                    "path": str(relative_path),
+                    "content": "[Unable to read file]",
+                })
+
+    return file_contents
+
+
+def count_tokens(text: str, encoding_name: str = "cl100k_base") -> int:
+    """Count tokens using tiktoken."""
+    if not TIKTOKEN_AVAILABLE:
+        # Rough estimation: ~4 characters per token
+        print("TikToken isn't available. Rough estimation: ~4 characters per token")
+        return len(text) // 4
+
+    try:
+        encoding = tiktoken.get_encoding(encoding_name)
+        return len(encoding.encode(text))
+    except Exception:
+        # Fallback to estimation
+        return len(text) // 4
+
+
+def main() -> None:  # noqa: PLR0915
+    """Main function to generate codebase context file."""
+    # Get the script's own path to exclude it
+    script_path: Path = Path(__file__).resolve()
+
+    # Set source directory (parent of scripts directory)
+    src_dir: Path = Path(__file__).parent.parent
+
+    # Output file location (in project root)
+    output_file: Path = src_dir.parent / "codebase_context.txt"
+
+    print(f"Scanning directory: {src_dir}")
+    print(f"Output file: {output_file}")
+    print("Filtering: Only .py files, excluding __pycache__\n")
+
+    # Collect all content
+    all_content: list[str] = []
+
+    with Path(output_file).open("w", encoding="utf-8") as f:
+        # Write header
+        header = "=" * 80 + "\n"
+        header += "CODEBASE CONTEXT FOR LLM\n"
+        header += "=" * 80 + "\n\n"
+        f.write(header)
+        all_content.append(header)
+
+        # Write directory structure
+        structure_section = "DIRECTORY STRUCTURE\n"
+        structure_section += "-" * 80 + "\n"
+        structure_section += f"{src_dir.name}/\n"
+
+        tree: list[str] = generate_tree(src_dir, exclude_path=script_path)
+        for line in tree:
+            structure_section += line + "\n"
+
+        structure_section += "\n" + "=" * 80 + "\n\n"
+        f.write(structure_section)
+        all_content.append(structure_section)
+
+        # Write file contents
+        content_header = "FILE CONTENTS\n"
+        content_header += "-" * 80 + "\n\n"
+        f.write(content_header)
+        all_content.append(content_header)
+
+        files: list[dict[str, str]] = read_all_files(src_dir, exclude_path=script_path)
+
+        for file_info in files:
+            file_section = "\n" + "=" * 80 + "\n"
+            file_section += f"FILE: {file_info['path']}\n"
+            file_section += "=" * 80 + "\n\n"
+            file_section += file_info["content"]
+            file_section += "\n\n"
+
+            f.write(file_section)
+            all_content.append(file_section)
+
+        # Calculate statistics
+        full_text = "".join(all_content)
+        char_count = len(full_text)
+        token_count = count_tokens(full_text)
+
+        # Write statistics
+        stats = "\n" + "=" * 80 + "\n"
+        stats += "STATISTICS\n"
+        stats += "=" * 80 + "\n"
+        stats += f"Total files: {len(files)}\n"
+        stats += f"Total characters: {char_count:,}\n"
+        stats += f"Total tokens (estimated): {token_count:,}\n"
+        if TIKTOKEN_AVAILABLE:
+            stats += "Token encoding: cl100k_base (GPT-4/GPT-3.5-turbo)\n"
+        else:
+            stats += "Token estimation: ~4 chars/token (tiktoken not available)\n"
+        stats += "=" * 80 + "\n"
+
+        f.write(stats)
+
+    # Print summary
+    print(f"✓ Successfully exported {len(files)} Python files")
+    print("\n📊 Statistics:")
+    print(f"  • Total characters: {char_count:,}")
+    print(f"  • Total tokens: {token_count:,}")
+    if TIKTOKEN_AVAILABLE:
+        print("  • Encoding: cl100k_base (GPT-4/GPT-3.5-turbo)")
+    else:
+        print("  • Note: Install tiktoken for accurate token counting")
+    print(f"\n💾 Output: {output_file}")
+
+
+if __name__ == "__main__":
+    main()
