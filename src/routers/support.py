@@ -1,8 +1,10 @@
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
 from ..agents.registry import load_agent
+from ..core.database import get_db_connection, get_or_create_user
 from ..models.schemas import SupportRequest, SupportResponse
 
 router = APIRouter(prefix="/api/v1/support", tags=["Support"])
@@ -13,20 +15,29 @@ async def request_support(request: SupportRequest) -> SupportResponse:
     """Запросить психологическую поддержку"""
 
     try:
-        # Загружаем агента поддержки
+        get_or_create_user(request.user_id)
+
         agent = load_agent("support", language=request.language)
 
-        # Генерируем ответ
         support_message = await agent.ainvoke({
             "emotional_state": request.emotional_state,
             "message": request.message
         })
 
-        # Формируем рекомендации
         recommendations = _get_recommendations_by_state(request.emotional_state)
-
-        # Формируем ресурсы
         resources = _get_support_resources(request.language)
+
+        # Сохраняем сессию поддержки
+        session_id = str(uuid.uuid4())
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """INSERT INTO support_sessions
+                   (session_id, user_id, message, emotional_state, support_message)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (session_id, request.user_id, request.message,
+                 request.emotional_state, support_message)
+            )
 
         return SupportResponse(
             support_message=support_message,
@@ -79,7 +90,7 @@ def _get_support_resources(language: str) -> list[dict[str, str]]:
             {
                 "title": "Техника Помодоро",
                 "description": "Метод управления временем для повышения продуктивности",
-                "url": "https://example.com/pomodoro"
+                "url": "https://ru.wikipedia.org/wiki/%D0%9C%D0%B5%D1%82%D0%BE%D0%B4_%D0%BF%D0%BE%D0%BC%D0%B8%D0%B4%D0%BE%D1%80%D0%B0"
             },
             {
                 "title": "Визуализация алгоритмов",
@@ -91,7 +102,7 @@ def _get_support_resources(language: str) -> list[dict[str, str]]:
         {
             "title": "Pomodoro Technique",
             "description": "Time management method to boost productivity",
-            "url": "https://example.com/pomodoro"
+            "url": "https://en.wikipedia.org/wiki/Pomodoro_Technique"
         },
         {
             "title": "Algorithm Visualizations",
@@ -104,6 +115,7 @@ def _get_support_resources(language: str) -> list[dict[str, str]]:
 @router.get("/resources")
 async def get_support_resources() -> dict[str, Any]:
     """Получить ресурсы психологической поддержки"""
+
     return {
         "articles": [
             {"title": "Как справиться со стрессом при изучении алгоритмов", "url": "#"},
@@ -124,5 +136,14 @@ async def get_support_resources() -> dict[str, Any]:
 @router.post("/feedback")
 async def submit_feedback(session_id: str, helpful: bool, comments: str = "") -> dict[str, str]:
     """Отправить обратную связь о сессии поддержки"""
-    # TODO: Сохранить в БД
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """UPDATE support_sessions
+               SET helpful = ?, comments = ?
+               WHERE session_id = ?""",
+            (helpful, comments, session_id)
+        )
+
     return {"status": "received"}
