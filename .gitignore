@@ -35,3 +35,4 @@ auth.py
 *.json
 *.html
 chroma_db/
+*.txt

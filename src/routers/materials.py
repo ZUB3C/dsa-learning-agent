@@ -4,6 +4,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from langchain_core.documents import Document
 
+from ..agents.llm_router_agent import LLMRouter
 from ..agents.materials_agent import format_retrieved_materials, retrieve_materials
 from ..agents.registry import load_agent
 from ..core.database import get_db_connection, get_or_create_user
@@ -78,6 +79,74 @@ async def ask_question(request: AskQuestionRequest) -> AskQuestionResponse:
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error answering question: {e!s}")
+
+
+@router.post("/generate-material")
+async def generate_material(
+        topic: str,
+        format: str,
+        length: str,
+        language: str = "ru"
+) -> dict[str, Any]:
+    """Сгенерировать учебный материал"""
+
+    try:
+        # Создаем роутер напрямую
+        router_instance = LLMRouter(language=language)
+        selected_model = router_instance.get_model_name(language)
+
+        # Используем materials agent для генерации контента
+        materials_agent = load_agent("materials", language=language)
+
+        # Определяем целевой уровень в зависимости от длины
+        level_map = {
+            "short": "beginner",
+            "medium": "intermediate",
+            "long": "advanced"
+        }
+        user_level = level_map.get(length.lower(), "intermediate")
+
+        # Генерируем материал
+        material_content = await materials_agent.ainvoke({
+            "topic": topic,
+            "user_level": user_level,
+            "retrieved_materials": f"Создайте {format} материал по теме '{topic}' длиной {length}",
+            "format": format
+        })
+
+        # Подсчет слов
+        word_count = len(material_content.split())
+
+        # Форматируем в зависимости от типа
+        if format.lower() == "summary":
+            formatted_material = f"# Краткое содержание: {topic}\n\n{material_content}"
+        elif format.lower() == "detailed":
+            formatted_material = f"# Подробный материал: {topic}\n\n{material_content}"
+        elif format.lower() == "example":
+            formatted_material = f"# Примеры по теме: {topic}\n\n{material_content}"
+        else:
+            formatted_material = material_content
+
+        # Сохраняем материал как пользовательскую тему
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            topic_id = f"generated_{uuid.uuid4()}"
+            cursor.execute(
+                """INSERT INTO custom_topics (topic_id, user_id, topic_name, content)
+                   VALUES (?, ?, ?, ?)""",
+                (topic_id, "system", f"{format}_{topic}", formatted_material)
+            )
+
+        return {
+            "material": formatted_material,
+            "format": format,
+            "word_count": word_count,
+            "model_used": selected_model,
+            "topic_id": topic_id,
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating material: {e!s}")
 
 
 @router.post("/add-custom-topic")
@@ -175,10 +244,10 @@ async def search_materials(query: str, filters: dict[str, Any] | None = None) ->
 
         relevance_scores = [1.0 / (i + 1) for i in range(len(results))]
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Search error: {e!s}")
-    else:
         return {
             "results": results,
             "relevance_scores": relevance_scores
         }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Search error: {e!s}")

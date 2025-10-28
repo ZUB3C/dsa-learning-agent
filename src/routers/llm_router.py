@@ -1,6 +1,8 @@
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from ..agents.llm_router_agent import LLMRouter
 from ..agents.registry import load_agent
 from ..models.schemas import LLMRouterRequest, LLMRouterResponse
 
@@ -46,19 +48,8 @@ async def select_and_generate(request: LLMRouterRequest) -> LLMRouterResponse:
         raise HTTPException(status_code=500, detail=f"Error in LLM routing: {e!s}")
 
 
-@router.post("/generate-task")
-async def generate_task(topic: str, difficulty: str, task_type: str, language: str = "ru"):
-    """Сгенерировать задачу"""
-    # TODO: Реализовать через router agent
-    return {
-        "task": {},
-        "solution_hints": [],
-        "model_used": "GigaChat" if language == "ru" else "DeepSeek"
-    }
-
-
 @router.get("/available-models")
-async def get_available_models():
+async def get_available_models() -> dict[str, Any]:
     """Получить список доступных моделей"""
     return {
         "models": [
@@ -74,12 +65,36 @@ async def get_available_models():
     }
 
 
-@router.post("/generate-material")
-async def generate_material(topic: str, format: str, length: str, language: str = "ru"):
-    """Сгенерировать учебный материал"""
-    # TODO: Реализовать
-    return {
-        "material": "",
-        "format": format,
-        "word_count": 0
-    }
+@router.post("/route-request")
+async def route_request(
+        request_type: str,
+        content: str,
+        context: dict[str, Any] | None = None,
+        language: str = "ru"
+) -> dict[str, Any]:
+    """Маршрутизация запроса к подходящей модели"""
+
+    try:
+        import json
+
+        router_instance = LLMRouter(language=language)
+
+        result = await router_instance.ainvoke({
+            "request_type": request_type,
+            "content": content,
+            "context": json.dumps(context or {}),
+            "language": language
+        })
+
+        try:
+            return json.loads(result)
+        except json.JSONDecodeError:
+            return {
+                "selected_model": router_instance.get_model_name(language),
+                "reasoning": "Default model selection",
+                "confidence": 0.5,
+                "alternative_models": []
+            }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error routing request: {e!s}")
