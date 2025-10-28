@@ -43,7 +43,7 @@ async def check_test(request: TestVerificationRequest) -> TestVerificationRespon
 
         # Формируем итоговый ответ
         return TestVerificationResponse(
-            is_correct=secondary_eval.get("final_score", 0) >= 70,
+            is_correct=secondary_eval.get("final_score", 0) >= 70,  # noqa: PLR2004
             score=secondary_eval.get("final_score", 0),
             feedback=secondary_eval.get("final_feedback", ""),
             verification_details={

@@ -29,9 +29,15 @@ app.include_router(support.router)
 
 
 @app.get("/")
-async def root():
+def root() -> dict[str, str]:
     return {
         "message": "АиСД Learning Platform API",
         "version": "1.0.0",
         "docs": "/docs"
     }
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="127.0.0.1", port=8001)

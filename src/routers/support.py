@@ -122,7 +122,7 @@ async def get_support_resources() -> dict[str, Any]:
 
 
 @router.post("/feedback")
-async def submit_feedback(session_id: str, helpful: bool, comments: str = "") -> dict[str, str]:  # noqa: FBT001
+async def submit_feedback(session_id: str, helpful: bool, comments: str = "") -> dict[str, str]:
     """Отправить обратную связь о сессии поддержки"""
     # TODO: Сохранить в БД
     return {"status": "received"}
