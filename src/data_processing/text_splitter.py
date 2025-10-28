@@ -72,7 +72,7 @@ class SmartTextSplitter:
                 "chunk_index": i,
                 "total_chunks": len(chunks),
                 "hierarchy": " > ".join(hierarchy),
-                "concepts": concepts
+                "concepts": ", ".join(concepts),
             }
 
             doc = Document(

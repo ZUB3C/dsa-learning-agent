@@ -34,3 +34,4 @@ auth.py
 *.db-journal
 *.json
 *.html
+chroma_db/

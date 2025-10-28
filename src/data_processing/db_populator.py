@@ -2,6 +2,8 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from langchain_community.vectorstores.utils import filter_complex_metadata
+
 from ..core.vector_store import VectorStoreManager, vector_store_manager
 from .pdf_parser import PDFParser
 from .text_splitter import SmartTextSplitter
@@ -39,9 +41,10 @@ class DatabasePopulator:
             try:
                 self.vector_store.delete_collection()
                 # Пересоздаем vector store после удаления
+                from ..core.vector_store import VectorStoreManager
                 self.vector_store = VectorStoreManager()
             except Exception as e:
-                logger.warning("Не удалось удалить коллекцию: %s", e)
+                logger.warning(f"Не удалось удалить коллекцию: {e}")
 
         logger.info(f"Начало обработки PDF: {self.pdf_path}")
 
@@ -78,29 +81,33 @@ class DatabasePopulator:
 
         logger.info(f"Всего создано документов: {len(all_documents)}")
 
+        # Фильтруем сложные метаданные перед добавлением
+        logger.info("Фильтрация сложных метаданных...")
+        filtered_documents = filter_complex_metadata(all_documents)
+        logger.info(f"Документов после фильтрации: {len(filtered_documents)}")
+
         # Добавляем в векторное хранилище
         logger.info("Добавление документов в ChromaDB...")
         try:
-            doc_ids = self.vector_store.add_documents(all_documents)
+            doc_ids = self.vector_store.add_documents(filtered_documents)
             logger.info(f"Успешно добавлено документов: {len(doc_ids)}")
 
             return {
                 "status": "success",
                 "total_sections": len(sections),
-                "total_documents": len(all_documents),
+                "total_documents": len(filtered_documents),
                 "document_ids": doc_ids
             }
         except Exception as e:
-            logger.exception("Ошибка при добавлении документов: %s", e)
+            logger.exception(f"Ошибка при добавлении документов: {e}")
             return {
                 "status": "error",
                 "error": str(e),
                 "total_sections": len(sections),
-                "total_documents": len(all_documents)
+                "total_documents": len(filtered_documents)
             }
 
-    @staticmethod
-    def _build_hierarchy(sections: list[dict], current_index: int) -> list[str]:
+    def _build_hierarchy(self, sections: list[dict], current_index: int) -> list[str]:
         """Построить иерархию для текущего раздела"""
 
         current_section = sections[current_index]
@@ -121,12 +128,7 @@ class DatabasePopulator:
 
     def get_statistics(self) -> dict:
         """Получить статистику по базе данных"""
-
-        # TODO: Реализовать получение статистики из ChromaDB
-        return {
-            "total_documents": 0,
-            "collections": []
-        }
+        return self.vector_store.get_collection_info()
 
 
 def populate_from_pdf(

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Скрипт для заполнения ChromaDB материалами из PDF
 """
@@ -10,12 +9,12 @@ from pathlib import Path
 # Добавляем корневую директорию в путь
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.data_processing import populate_from_pdf
+from ..data_processing import populate_from_pdf
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Заполнение ChromaDB материалами из PDF документа"
+        description="Заполнение ChromaDB материалами из PDF документа с оглавлением"
     )
 
     parser.add_argument(
@@ -82,7 +81,7 @@ def main() -> None:
 
     except Exception as e:
         print(f"\n❌ Критическая ошибка: {e}")
-        import traceback
+        import traceback  # noqa: PLC0415
         traceback.print_exc()
         sys.exit(1)
 
