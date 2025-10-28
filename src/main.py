@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .core.database import init_database
 from .routers import assessment, health, llm_router, materials, support, tests, verification
 
 app = FastAPI(
@@ -17,6 +18,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def startup_event() -> None:
+    """Инициализация при запуске"""
+    init_database()
+
 
 # Подключение роутеров
 app.include_router(health.router)
