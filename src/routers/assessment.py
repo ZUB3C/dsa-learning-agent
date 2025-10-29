@@ -3,7 +3,7 @@ import uuid
 
 from fastapi import APIRouter
 
-from ..core.database import get_db_connection, get_or_create_user
+from ..core.database import Assessment, AssessmentSession, get_db_session, get_or_create_user
 from ..models.schemas import (
     AssessmentQuestion,
     AssessmentStartRequest,
@@ -86,13 +86,13 @@ async def start_assessment(request: AssessmentStartRequest) -> AssessmentStartRe
         for q in ASSESSMENT_QUESTIONS
     ]
 
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """INSERT INTO assessment_sessions (session_id, user_id, questions)
-               VALUES (?, ?, ?)""",
-            (session_id, request.user_id, json.dumps(ASSESSMENT_QUESTIONS)),
+    with get_db_session() as session:
+        assessment_session = AssessmentSession(
+            session_id=session_id,
+            user_id=request.user_id,
+            questions=json.dumps(ASSESSMENT_QUESTIONS),
         )
+        session.add(assessment_session)
 
     return AssessmentStartResponse(test_questions=questions, session_id=session_id)
 
@@ -101,20 +101,19 @@ async def start_assessment(request: AssessmentStartRequest) -> AssessmentStartRe
 async def submit_assessment(request: AssessmentSubmitRequest) -> AssessmentSubmitResponse:
     """Отправить результаты тестирования"""
 
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT user_id, questions FROM assessment_sessions WHERE session_id = ?",
-            (request.session_id,),
+    with get_db_session() as session:
+        assessment_session = (
+            session.query(AssessmentSession)
+            .filter(AssessmentSession.session_id == request.session_id)
+            .first()
         )
-        session = cursor.fetchone()
 
-        if not session:
+        if not assessment_session:
             questions = ASSESSMENT_QUESTIONS
             user_id = "unknown"
         else:
-            user_id = session["user_id"]
-            questions = json.loads(session["questions"])
+            user_id = assessment_session.user_id
+            questions = json.loads(assessment_session.questions)
 
     correct_count = 0
     topic_scores: dict[str, list[int]] = {}
@@ -166,21 +165,16 @@ async def submit_assessment(request: AssessmentSubmitRequest) -> AssessmentSubmi
             "Решайте сложные задачи и участвуйте в соревнованиях по программированию",
         ])
 
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """INSERT INTO assessments
-               (user_id, session_id, level, score, knowledge_areas, recommendations)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (
-                user_id,
-                request.session_id,
-                level,
-                percentage,
-                json.dumps(knowledge_areas),
-                json.dumps(recommendations),
-            ),
+    with get_db_session() as session:
+        assessment = Assessment(
+            user_id=user_id,
+            session_id=request.session_id,
+            level=level,
+            score=percentage,
+            knowledge_areas=json.dumps(knowledge_areas),
+            recommendations=json.dumps(recommendations),
         )
+        session.add(assessment)
 
     return AssessmentSubmitResponse(
         level=level, knowledge_areas=knowledge_areas, recommendations=recommendations
@@ -191,17 +185,13 @@ async def submit_assessment(request: AssessmentSubmitRequest) -> AssessmentSubmi
 async def get_assessment_results(user_id: str) -> GetAssessmentResultsResponse:
     """Получить результаты начальной оценки"""
 
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """SELECT level, score, knowledge_areas, recommendations, completed_at
-               FROM assessments
-               WHERE user_id = ?
-               ORDER BY completed_at DESC
-               LIMIT 1""",
-            (user_id,),
+    with get_db_session() as session:
+        result = (
+            session.query(Assessment)
+            .filter(Assessment.user_id == user_id)
+            .order_by(Assessment.completed_at.desc())
+            .first()
         )
-        result = cursor.fetchone()
 
         if not result:
             return GetAssessmentResultsResponse(
@@ -210,13 +200,9 @@ async def get_assessment_results(user_id: str) -> GetAssessmentResultsResponse:
 
         return GetAssessmentResultsResponse(
             user_id=user_id,
-            initial_level=result["level"],
-            score=result["score"],
-            knowledge_areas=json.loads(result["knowledge_areas"])
-            if result["knowledge_areas"]
-            else {},
-            recommendations=json.loads(result["recommendations"])
-            if result["recommendations"]
-            else [],
-            completed_at=result["completed_at"],
+            initial_level=result.level,
+            score=result.score,
+            knowledge_areas=json.loads(result.knowledge_areas) if result.knowledge_areas else {},
+            recommendations=json.loads(result.recommendations) if result.recommendations else [],
+            completed_at=result.completed_at.isoformat(),
         )

@@ -4,7 +4,7 @@ import uuid
 from fastapi import APIRouter, HTTPException
 
 from ..agents.registry import load_agent
-from ..core.database import get_db_connection, get_or_create_user
+from ..core.database import TestResult, Verification, get_db_session, get_or_create_user
 from ..models.schemas import (
     GetVerificationHistoryResponse,
     TestVerificationRequest,
@@ -50,43 +50,27 @@ async def check_test(request: TestVerificationRequest) -> TestVerificationRespon
         is_correct = secondary_eval.get("final_score", 0) >= 70
 
         # Извлекаем user_id из test_results
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT user_id FROM test_results WHERE test_id = ? LIMIT 1", (request.test_id,)
+        with get_db_session() as session:
+            test_result = (
+                session.query(TestResult).filter(TestResult.test_id == request.test_id).first()
             )
-            test_result = cursor.fetchone()
-            user_id = test_result["user_id"] if test_result else "unknown"
+            user_id = test_result.user_id if test_result else "unknown"
 
         get_or_create_user(user_id)
 
         # Сохраняем результат с деталями двойной проверки
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """INSERT INTO verifications
-                   (verification_id, test_id, user_id, question, user_answer, expected_answer,
-                    is_correct, score, feedback, verification_details, language)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    verification_id,
-                    request.test_id,
-                    user_id,
-                    request.question,
-                    request.user_answer,
-                    request.expected_answer,
-                    is_correct,
-                    secondary_eval.get("final_score", 0),
-                    secondary_eval.get("final_feedback", ""),
-                    json.dumps({
-                        "primary_score": primary_eval.get("score", 0),
-                        "secondary_score": secondary_eval.get("final_score", 0),
-                        "agree_with_primary": secondary_eval.get("agree_with_primary", True),
-                        "verification_notes": secondary_eval.get("verification_notes", ""),
-                    }),
-                    request.language,
-                ),
+        with get_db_session() as session:
+            verification = Verification(
+                verification_id=verification_id,
+                test_id=request.test_id,
+                user_id=user_id,
+                question=request.question,
+                user_answer=request.user_answer,
+                is_correct=is_correct,
+                score=secondary_eval.get("final_score", 0),
+                feedback=secondary_eval.get("final_feedback", ""),
             )
+            session.add(verification)
 
         return TestVerificationResponse(
             is_correct=is_correct,
@@ -109,25 +93,22 @@ async def check_test(request: TestVerificationRequest) -> TestVerificationRespon
 async def get_verification_history(user_id: str) -> GetVerificationHistoryResponse:
     """Получить историю проверок пользователя"""
 
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """SELECT verification_id, test_id, question, score, is_correct, created_at
-               FROM verifications
-               WHERE user_id = ?
-               ORDER BY created_at DESC""",
-            (user_id,),
+    with get_db_session() as session:
+        verifications = (
+            session.query(Verification)
+            .filter(Verification.user_id == user_id)
+            .order_by(Verification.created_at.desc())
+            .all()
         )
-        verifications = cursor.fetchall()
 
         tests_list: list[VerificationHistoryItem] = [
             VerificationHistoryItem(
-                verification_id=v["verification_id"],
-                test_id=v["test_id"],
-                question=v["question"],
-                score=v["score"],
-                is_correct=bool(v["is_correct"]),
-                created_at=v["created_at"],
+                verification_id=v.verification_id,
+                test_id=v.test_id,
+                question=v.question,
+                score=v.score,
+                is_correct=v.is_correct,
+                created_at=v.created_at.isoformat(),
             )
             for v in verifications
         ]

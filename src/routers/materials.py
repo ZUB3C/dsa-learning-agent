@@ -5,7 +5,7 @@ from langchain_core.documents import Document
 
 from ..agents.llm_router_agent import LLMRouter
 from ..agents.registry import load_agent
-from ..core.database import get_db_connection, get_or_create_user
+from ..core.database import CustomTopic, get_db_session, get_or_create_user
 from ..core.vector_store import vector_store_manager
 from ..models.schemas import (
     AddCustomTopicRequest,
@@ -114,13 +114,14 @@ async def generate_material(request: GenerateMaterialRequest) -> GenerateMateria
         # Сохраняем сгенерированный материал
         topic_id = f"generated_{uuid.uuid4()}"
 
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """INSERT INTO custom_topics (topic_id, user_id, topic_name, content)
-                   VALUES (?, ?, ?, ?)""",
-                (topic_id, "system", f"{request.format}_{request.topic}", formatted_material),
+        with get_db_session() as session:
+            custom_topic = CustomTopic(
+                topic_id=topic_id,
+                user_id="system",
+                topic_name=f"{request.format}_{request.topic}",
+                content=formatted_material,
             )
+            session.add(custom_topic)
 
         return GenerateMaterialResponse(
             material=formatted_material,
@@ -142,13 +143,14 @@ async def add_custom_topic(request: AddCustomTopicRequest) -> AddCustomTopicResp
     topic_id = f"custom_{uuid.uuid4()}"
 
     # Сохраняем в БД
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """INSERT INTO custom_topics (topic_id, user_id, topic_name, content)
-               VALUES (?, ?, ?, ?)""",
-            (topic_id, request.user_id, request.topic_name, request.content),
+    with get_db_session() as session:
+        custom_topic = CustomTopic(
+            topic_id=topic_id,
+            user_id=request.user_id,
+            topic_name=request.topic_name,
+            content=request.content,
         )
+        session.add(custom_topic)
 
     # Добавляем в векторное хранилище
     try:
@@ -187,13 +189,11 @@ async def get_topics() -> GetTopicsResponse:
         "Динамическое программирование",
     ]
 
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT topic_id, topic_name, user_id FROM custom_topics")
-        custom = cursor.fetchall()
+    with get_db_session() as session:
+        custom = session.query(CustomTopic).all()
 
         custom_topics: list[TopicInfo] = [
-            TopicInfo(topic_id=t["topic_id"], topic_name=t["topic_name"], user_id=t["user_id"])
+            TopicInfo(topic_id=t.topic_id, topic_name=t.topic_name, user_id=t.user_id)
             for t in custom
         ]
 

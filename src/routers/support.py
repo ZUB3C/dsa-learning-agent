@@ -4,7 +4,7 @@ import uuid
 from fastapi import APIRouter, HTTPException
 
 from ..agents.registry import load_agent
-from ..core.database import get_db_connection, get_or_create_user
+from ..core.database import SupportSession, get_db_session, get_or_create_user
 from ..models.schemas import (
     GetSupportResourcesResponse,
     SubmitFeedbackRequest,
@@ -47,21 +47,16 @@ async def get_support(request: SupportRequest) -> SupportResponse:
 
         # Сохраняем в БД
         session_id = str(uuid.uuid4())
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """INSERT INTO support_sessions
-                   (session_id, user_id, user_message, emotional_state, response, recommendations)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (
-                    session_id,
-                    request.user_id,
-                    request.message,
-                    request.emotional_state,
-                    support_message,
-                    json.dumps(recommendations),
-                ),
+        with get_db_session() as session:
+            support_session = SupportSession(
+                session_id=session_id,
+                user_id=request.user_id,
+                user_message=request.message,
+                emotional_state=request.emotional_state,
+                response=support_message,
+                recommendations=json.dumps(recommendations),
             )
+            session.add(support_session)
 
         return SupportResponse(
             support_message=support_message, recommendations=recommendations, resources=resources
@@ -71,10 +66,15 @@ async def get_support(request: SupportRequest) -> SupportResponse:
         raise HTTPException(status_code=500, detail=f"Support error: {e!s}")
 
 
+def _generate_default_recommendations(emotional_state: str) -> list[str]:
+    """Сгенерировать рекомендации по умолчанию"""
+    return _get_recommendations_by_state(emotional_state)
+
+
 def _get_recommendations_by_state(emotional_state: str) -> list[str]:
     """Получить рекомендации в зависимости от эмоционального состояния"""
 
-    recommendations_map = {
+    recommendations_map: dict[str, list[str]] = {
         "stressed": [
             "Делайте регулярные перерывы во время обучения (техника Помодоро)",
             "Практикуйте дыхательные упражнения для снятия стресса",
@@ -154,13 +154,15 @@ async def get_support_resources() -> GetSupportResourcesResponse:
 async def submit_feedback(request: SubmitFeedbackRequest) -> SubmitFeedbackResponse:
     """Отправить обратную связь о сессии поддержки"""
 
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """UPDATE support_sessions
-               SET helpful = ?, comments = ?
-               WHERE session_id = ?""",
-            (request.helpful, request.comments, request.session_id),
+    with get_db_session() as session:
+        support_session = (
+            session.query(SupportSession)
+            .filter(SupportSession.session_id == request.session_id)
+            .first()
         )
+
+        if support_session:
+            support_session.helpful = request.helpful
+            support_session.comments = request.comments
 
     return SubmitFeedbackResponse(status="received")

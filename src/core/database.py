@@ -1,142 +1,155 @@
 """
-Модуль для работы с SQLite базой данных
+Модуль для работы с базой данных через SQLAlchemy
 """
 
-import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
-from pathlib import Path
+from datetime import datetime
 
-DATABASE_PATH = Path(__file__).parent.parent.parent / "app_data.db"
+from sqlalchemy import Boolean, Float, Integer, String, Text, create_engine
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
+
+from ..config import settings
+
+
+class Base(DeclarativeBase):
+    """Базовый класс для всех моделей"""
+
+
+class User(Base):
+    """Таблица пользователей"""
+
+    __tablename__ = "users"
+
+    user_id: Mapped[str] = mapped_column(String, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+
+class AssessmentSession(Base):
+    """Таблица сессий оценки"""
+
+    __tablename__ = "assessment_sessions"
+
+    session_id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, nullable=False)
+    questions: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+
+class Assessment(Base):
+    """Таблица результатов оценки"""
+
+    __tablename__ = "assessments"
+
+    assessment_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String, nullable=False)
+    session_id: Mapped[str] = mapped_column(String, nullable=False)
+    level: Mapped[str] = mapped_column(String, nullable=False)
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+    knowledge_areas: Mapped[str] = mapped_column(Text, nullable=False)
+    recommendations: Mapped[str] = mapped_column(Text, nullable=False)
+    completed_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+
+class Test(Base):
+    """Таблица тестов"""
+
+    __tablename__ = "tests"
+
+    test_id: Mapped[str] = mapped_column(String, primary_key=True)
+    topic: Mapped[str] = mapped_column(String, nullable=False)
+    difficulty: Mapped[str] = mapped_column(String, nullable=False)
+    questions: Mapped[str] = mapped_column(Text, nullable=False)
+    expected_duration: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+
+class TestResult(Base):
+    """Таблица результатов тестов"""
+
+    __tablename__ = "test_results"
+
+    result_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    test_id: Mapped[str] = mapped_column(String, nullable=False)
+    user_id: Mapped[str] = mapped_column(String, nullable=False)
+    answers: Mapped[str] = mapped_column(Text, nullable=False)
+    submitted_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+
+class Verification(Base):
+    """Таблица проверок"""
+
+    __tablename__ = "verifications"
+
+    verification_id: Mapped[str] = mapped_column(String, primary_key=True)
+    test_id: Mapped[str] = mapped_column(String, nullable=False)
+    user_id: Mapped[str] = mapped_column(String, nullable=False)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    user_answer: Mapped[str] = mapped_column(Text, nullable=False)
+    is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+    feedback: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+
+class CustomTopic(Base):
+    """Таблица пользовательских тем"""
+
+    __tablename__ = "custom_topics"
+
+    topic_id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, nullable=False)
+    topic_name: Mapped[str] = mapped_column(String, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+
+class SupportSession(Base):
+    """Таблица сессий поддержки"""
+
+    __tablename__ = "support_sessions"
+
+    session_id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, nullable=False)
+    user_message: Mapped[str] = mapped_column(Text, nullable=False)
+    emotional_state: Mapped[str] = mapped_column(String, nullable=False)
+    response: Mapped[str] = mapped_column(Text, nullable=False)
+    recommendations: Mapped[str] = mapped_column(Text, nullable=False)
+    helpful: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    comments: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+
+# Создание движка и сессии
+engine = create_engine(settings.database_url, echo=False)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 @contextmanager
-def get_db_connection() -> Generator[sqlite3.Connection]:
-    """Контекстный менеджер для работы с БД"""
-    conn = sqlite3.connect(str(DATABASE_PATH))
-    conn.row_factory = sqlite3.Row
+def get_db_session() -> Generator[Session]:
+    """Контекстный менеджер для работы с БД через SQLAlchemy"""
+    session = SessionLocal()
     try:
-        yield conn
-        conn.commit()
+        yield session
+        session.commit()
     except Exception:
-        conn.rollback()
+        session.rollback()
         raise
     finally:
-        conn.close()
+        session.close()
 
 
 def init_database() -> None:
-    """Инициализация базы данных"""
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-
-        # Таблица пользователей
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                user_id TEXT PRIMARY KEY,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # Таблица сессий оценки
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS assessment_sessions (
-                session_id TEXT PRIMARY KEY,
-                user_id TEXT,
-                questions TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(user_id)
-            )
-        """)
-
-        # Таблица результатов оценки
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS assessments (
-                assessment_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id TEXT,
-                session_id TEXT,
-                level TEXT,
-                score REAL,
-                knowledge_areas TEXT,
-                recommendations TEXT,
-                completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(user_id)
-            )
-        """)
-
-        # Таблица тестов
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS tests (
-                test_id TEXT PRIMARY KEY,
-                topic TEXT,
-                difficulty TEXT,
-                questions TEXT,
-                expected_duration INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # Таблица результатов тестов
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS test_results (
-                result_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                test_id TEXT,
-                user_id TEXT,
-                answers TEXT,
-                submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (test_id) REFERENCES tests(test_id),
-                FOREIGN KEY (user_id) REFERENCES users(user_id)
-            )
-        """)
-
-        # Таблица проверок
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS verifications (
-                verification_id TEXT PRIMARY KEY,
-                test_id TEXT,
-                user_id TEXT,
-                question TEXT,
-                user_answer TEXT,
-                is_correct BOOLEAN,
-                score REAL,
-                feedback TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (test_id) REFERENCES tests(test_id),
-                FOREIGN KEY (user_id) REFERENCES users(user_id)
-            )
-        """)
-
-        # Таблица пользовательских тем
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS custom_topics (
-                topic_id TEXT PRIMARY KEY,
-                user_id TEXT,
-                topic_name TEXT,
-                content TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(user_id)
-            )
-        """)
-
-        # Таблица сессий поддержки
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS support_sessions (
-                session_id TEXT PRIMARY KEY,
-                user_id TEXT,
-                user_message TEXT,
-                emotional_state TEXT,
-                response TEXT,
-                recommendations TEXT,
-                helpful BOOLEAN,
-                comments TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(user_id)
-            )
-        """)
+    """Инициализация базы данных - создание всех таблиц"""
+    Base.metadata.create_all(bind=engine)
 
 
-def get_or_create_user(user_id: str) -> None:
+def get_or_create_user(user_id: str) -> User:
     """Получить или создать пользователя"""
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
+    with get_db_session() as session:
+        user = session.query(User).filter(User.user_id == user_id).first()
+        if not user:
+            user = User(user_id=user_id)
+            session.add(user)
+            session.commit()
+        return user

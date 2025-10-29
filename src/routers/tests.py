@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 
 from ..agents.llm_router_agent import LLMRouter
 from ..agents.registry import load_agent
-from ..core.database import get_db_connection, get_or_create_user
+from ..core.database import Test, TestResult, get_db_session, get_or_create_user
 from ..models.schemas import (
     CompletedTestInfo,
     GenerateTaskRequest,
@@ -64,19 +64,15 @@ async def generate_test(request: GenerateTestRequest) -> GenerateTestResponse:
         test_id = str(uuid.uuid4())
         expected_duration = request.question_count * 5  # 5 минут на вопрос
 
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """INSERT INTO tests (test_id, topic, difficulty, questions, expected_duration)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (
-                    test_id,
-                    request.topic,
-                    request.difficulty,
-                    json.dumps([q.dict() for q in questions]),
-                    expected_duration,
-                ),
+        with get_db_session() as session:
+            test = Test(
+                test_id=test_id,
+                topic=request.topic,
+                difficulty=request.difficulty,
+                questions=json.dumps([q.dict() for q in questions]),
+                expected_duration=expected_duration,
             )
+            session.add(test)
 
         return GenerateTestResponse(
             test_id=test_id, questions=questions, expected_duration=expected_duration
@@ -128,19 +124,15 @@ async def generate_task(request: GenerateTaskRequest) -> GenerateTaskResponse:
                     hints.append(TaskHint(hint_level=idx, hint_text=point))
 
                 # Сохраняем задачу в БД
-                with get_db_connection() as conn:
-                    cursor = conn.cursor()
-                    cursor.execute(
-                        """INSERT INTO tests (test_id, topic, difficulty, questions, expected_duration)
-                           VALUES (?, ?, ?, ?, ?)""",
-                        (
-                            str(task.task_id),
-                            request.topic,
-                            request.difficulty,
-                            json.dumps([task.dict()]),
-                            10,  # 10 минут на задачу
-                        ),
+                with get_db_session() as session:
+                    test = Test(
+                        test_id=str(task.task_id),
+                        topic=request.topic,
+                        difficulty=request.difficulty,
+                        questions=json.dumps([task.dict()]),
+                        expected_duration=10,
                     )
+                    session.add(test)
 
                 return GenerateTaskResponse(
                     task=task, solution_hints=hints, model_used=selected_model
@@ -178,13 +170,11 @@ async def submit_test_for_verification(request: SubmitTestRequest) -> SubmitTest
 
     verification_id = str(uuid.uuid4())
 
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """INSERT INTO test_results (test_id, user_id, answers)
-               VALUES (?, ?, ?)""",
-            (request.test_id, request.user_id, json.dumps(request.answers)),
+    with get_db_session() as session:
+        test_result = TestResult(
+            test_id=request.test_id, user_id=request.user_id, answers=json.dumps(request.answers)
         )
+        session.add(test_result)
 
     return SubmitTestResponse(verification_id=verification_id, status="pending")
 
@@ -193,28 +183,21 @@ async def submit_test_for_verification(request: SubmitTestRequest) -> SubmitTest
 async def get_test(test_id: str) -> GetTestResponse:
     """Получить тест по ID"""
 
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """SELECT test_id, topic, difficulty, questions, expected_duration, created_at
-               FROM tests
-               WHERE test_id = ?""",
-            (test_id,),
-        )
-        test = cursor.fetchone()
+    with get_db_session() as session:
+        test = session.query(Test).filter(Test.test_id == test_id).first()
 
         if not test:
             raise HTTPException(status_code=404, detail="Test not found")
 
         return GetTestResponse(
             test={
-                "test_id": test["test_id"],
-                "topic": test["topic"],
-                "difficulty": test["difficulty"],
-                "questions": json.loads(test["questions"]),
-                "expected_duration": test["expected_duration"],
+                "test_id": test.test_id,
+                "topic": test.topic,
+                "difficulty": test.difficulty,
+                "questions": json.loads(test.questions),
+                "expected_duration": test.expected_duration,
             },
-            metadata={"created_at": test["created_at"]},
+            metadata={"created_at": test.created_at.isoformat()},
         )
 
 
@@ -222,25 +205,22 @@ async def get_test(test_id: str) -> GetTestResponse:
 async def get_completed_tests(user_id: str) -> GetCompletedTestsResponse:
     """Получить завершенные тесты пользователя"""
 
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """SELECT r.result_id, r.test_id, t.topic, t.difficulty, r.submitted_at
-               FROM test_results r
-               JOIN tests t ON r.test_id = t.test_id
-               WHERE r.user_id = ?
-               ORDER BY r.submitted_at DESC""",
-            (user_id,),
+    with get_db_session() as session:
+        results = (
+            session.query(TestResult, Test)
+            .join(Test, TestResult.test_id == Test.test_id)
+            .filter(TestResult.user_id == user_id)
+            .order_by(TestResult.submitted_at.desc())
+            .all()
         )
-        results = cursor.fetchall()
 
         completed_tests: list[CompletedTestInfo] = [
             CompletedTestInfo(
-                result_id=r["result_id"],
-                test_id=r["test_id"],
-                topic=r["topic"],
-                difficulty=r["difficulty"],
-                submitted_at=r["submitted_at"],
+                result_id=r.TestResult.result_id,
+                test_id=r.TestResult.test_id,
+                topic=r.Test.topic,
+                difficulty=r.Test.difficulty,
+                submitted_at=r.TestResult.submitted_at.isoformat(),
             )
             for r in results
         ]
