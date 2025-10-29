@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .core.database import init_database
+from .models.schemas import RootResponse
 from .routers import assessment, health, llm_router, materials, support, tests, verification
 
 app = FastAPI(
@@ -21,7 +22,7 @@ app.add_middleware(
 
 
 @app.on_event("startup")
-async def startup_event() -> None:
+async def startup_event() -> None:  # noqa: RUF029
     """Инициализация при запуске"""
     init_database()
 
@@ -37,12 +38,13 @@ app.include_router(support.router)
 
 
 @app.get("/")
-def root() -> dict[str, str]:
-    return {
-        "message": "АиСД Learning Platform API",
-        "version": "1.0.0",
-        "docs": "/docs"
-    }
+def root() -> RootResponse:
+    """Root endpoint"""
+    return RootResponse(
+        message="DSA Learning Platform API",
+        version="1.0.0",
+        docs="/docs"
+    )
 
 
 if __name__ == "__main__":

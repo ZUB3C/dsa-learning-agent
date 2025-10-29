@@ -1,12 +1,16 @@
 import json
 import uuid
-from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
 from ..agents.registry import load_agent
 from ..core.database import get_db_connection, get_or_create_user
-from ..models.schemas import TestVerificationRequest, TestVerificationResponse
+from ..models.schemas import (
+    GetVerificationHistoryResponse,
+    TestVerificationRequest,
+    TestVerificationResponse,
+    VerificationHistoryItem,
+)
 
 router = APIRouter(prefix="/api/v1/verification", tags=["Verification"])
 
@@ -16,10 +20,6 @@ async def check_test(request: TestVerificationRequest) -> TestVerificationRespon
     """Проверка ответа на тест с двойной верификацией"""
 
     try:
-        # Создаем пользователя если не существует
-        user_id = request.test_id.split("_")[0] if "_" in request.test_id else "unknown"
-        get_or_create_user(user_id)
-
         # Первичная проверка
         primary_agent = load_agent("verification", language=request.language)
         primary_result = await primary_agent.ainvoke({
@@ -33,7 +33,7 @@ async def check_test(request: TestVerificationRequest) -> TestVerificationRespon
         except json.JSONDecodeError:
             raise HTTPException(status_code=500, detail="Failed to parse primary evaluation")
 
-        # Вторичная проверка
+        # Вторичная проверка (перекрёстная верификация другой моделью)
         secondary_agent = load_agent("verification-secondary", language=request.language)
         secondary_result = await secondary_agent.ainvoke({
             "primary_evaluation": json.dumps(primary_eval, ensure_ascii=False),
@@ -49,13 +49,25 @@ async def check_test(request: TestVerificationRequest) -> TestVerificationRespon
         verification_id = str(uuid.uuid4())
         is_correct = secondary_eval.get("final_score", 0) >= 70
 
-        # Сохраняем результат проверки в БД
+        # Извлекаем user_id из test_results
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT user_id FROM test_results WHERE test_id = ? LIMIT 1",
+                (request.test_id,)
+            )
+            test_result = cursor.fetchone()
+            user_id = test_result["user_id"] if test_result else "unknown"
+
+        get_or_create_user(user_id)
+
+        # Сохраняем результат с деталями двойной проверки
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """INSERT INTO verifications
-                   (verification_id, test_id, user_id, question, user_answer,
-                    expected_answer, is_correct, score, feedback, verification_details, language)
+                   (verification_id, test_id, user_id, question, user_answer, expected_answer,
+                    is_correct, score, feedback, verification_details, language)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     verification_id,
@@ -95,7 +107,7 @@ async def check_test(request: TestVerificationRequest) -> TestVerificationRespon
 
 
 @router.get("/history/{user_id}")
-async def get_verification_history(user_id: str) -> dict[str, Any]:
+async def get_verification_history(user_id: str) -> GetVerificationHistoryResponse:
     """Получить историю проверок пользователя"""
 
     with get_db_connection() as conn:
@@ -109,25 +121,22 @@ async def get_verification_history(user_id: str) -> dict[str, Any]:
         )
         verifications = cursor.fetchall()
 
-        tests_list = [
-            {
-                "verification_id": v["verification_id"],
-                "test_id": v["test_id"],
-                "question": v["question"],
-                "score": v["score"],
-                "is_correct": bool(v["is_correct"]),
-                "created_at": v["created_at"]
-            }
+        tests_list: list[VerificationHistoryItem] = [
+            VerificationHistoryItem(
+                verification_id=v["verification_id"],
+                test_id=v["test_id"],
+                question=v["question"],
+                score=v["score"],
+                is_correct=bool(v["is_correct"]),
+                created_at=v["created_at"]
+            )
             for v in verifications
         ]
 
-        if tests_list:
-            average_score = sum(t["score"] for t in tests_list) / len(tests_list)
-        else:
-            average_score = 0.0
+        average_score = sum(t.score for t in tests_list) / len(tests_list) if tests_list else 0.0
 
-        return {
-            "tests": tests_list,
-            "average_score": average_score,
-            "total_tests": len(tests_list)
-        }
+        return GetVerificationHistoryResponse(
+            tests=tests_list,
+            average_score=average_score,
+            total_tests=len(tests_list)
+        )

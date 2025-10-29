@@ -71,6 +71,58 @@ class AskQuestionResponse(BaseModel):
     related_concepts: list[str]
 
 
+class AddCustomTopicRequest(BaseModel):
+    topic_name: str
+    user_id: str
+    content: str
+
+
+class AddCustomTopicResponse(BaseModel):
+    topic_id: str
+    status: str
+
+
+class TopicInfo(BaseModel):
+    topic_id: str
+    topic_name: str
+    user_id: str
+
+
+class GetTopicsResponse(BaseModel):
+    predefined_topics: list[str]
+    custom_topics: list[TopicInfo]
+
+
+class SearchMaterialsRequest(BaseModel):
+    query: str
+    filters: dict[str, Any] | None = None
+
+
+class MaterialSearchResult(BaseModel):
+    content: str
+    metadata: dict[str, Any]
+
+
+class SearchMaterialsResponse(BaseModel):
+    results: list[MaterialSearchResult]
+    relevance_scores: list[float]
+
+
+class GenerateMaterialRequest(BaseModel):
+    topic: str
+    format: str
+    length: str
+    language: str = "ru"
+
+
+class GenerateMaterialResponse(BaseModel):
+    material: str
+    format: str
+    word_count: int
+    model_used: str
+    topic_id: str
+
+
 # Модуль 4: Генерация тестов
 class GenerateTestRequest(BaseModel):
     topic: str
@@ -92,6 +144,62 @@ class GenerateTestResponse(BaseModel):
     expected_duration: int
 
 
+class GenerateTaskRequest(BaseModel):
+    topic: str
+    difficulty: str
+    task_type: str
+    language: str = "ru"
+
+
+class TaskHint(BaseModel):
+    hint_level: int
+    hint_text: str
+
+
+class Task(BaseModel):
+    task_id: int | str
+    description: str
+    topic: str
+    difficulty: str
+    task_type: str
+    expected_answer: str | None = None
+
+
+class GenerateTaskResponse(BaseModel):
+    task: Task
+    solution_hints: list[TaskHint]
+    model_used: str
+
+
+class GetTestResponse(BaseModel):
+    test: dict[str, Any]
+    metadata: dict[str, Any]
+
+
+class CompletedTestInfo(BaseModel):
+    result_id: int
+    test_id: str
+    topic: str
+    difficulty: str
+    submitted_at: str
+
+
+class GetCompletedTestsResponse(BaseModel):
+    completed_tests: list[CompletedTestInfo]
+    statistics: dict[str, int]
+
+
+class SubmitTestRequest(BaseModel):
+    test_id: str
+    user_id: str
+    answers: list[dict[str, Any]]
+
+
+class SubmitTestResponse(BaseModel):
+    verification_id: str
+    status: str
+
+
 # Модуль 5: LLM Router
 class LLMRouterRequest(BaseModel):
     request_type: Literal["material", "task", "test", "question", "support"]
@@ -106,6 +214,31 @@ class LLMRouterResponse(BaseModel):
     metadata: dict[str, Any]
 
 
+class ModelInfo(BaseModel):
+    name: str
+    language: str
+    provider: str
+
+
+class GetAvailableModelsResponse(BaseModel):
+    models: list[ModelInfo]
+    capabilities: dict[str, bool]
+
+
+class RouteRequestRequest(BaseModel):
+    request_type: str
+    content: str
+    context: dict[str, Any] | None = None
+    language: str = "ru"
+
+
+class RouteRequestResponse(BaseModel):
+    selected_model: str
+    reasoning: str
+    confidence: float
+    alternative_models: list[str]
+
+
 # Модуль 6: Психологическая поддержка
 class SupportRequest(BaseModel):
     user_id: str
@@ -118,3 +251,59 @@ class SupportResponse(BaseModel):
     support_message: str
     recommendations: list[str]
     resources: list[dict[str, str]]
+
+
+class GetSupportResourcesResponse(BaseModel):
+    articles: list[dict[str, str]]
+    exercises: list[dict[str, str]]
+    tips: list[str]
+
+
+class SubmitFeedbackRequest(BaseModel):
+    session_id: str
+    helpful: bool
+    comments: str = ""
+
+
+class SubmitFeedbackResponse(BaseModel):
+    status: str
+
+
+# Модуль 7: Verification History
+class VerificationHistoryItem(BaseModel):
+    verification_id: str
+    test_id: str
+    question: str
+    score: float
+    is_correct: bool
+    created_at: str
+
+
+class GetVerificationHistoryResponse(BaseModel):
+    tests: list[VerificationHistoryItem]
+    average_score: float
+    total_tests: int
+
+
+# Модуль 8: Assessment Results
+class GetAssessmentResultsResponse(BaseModel):
+    message: str | None = None
+    user_id: str | None = None
+    initial_level: str | None = None
+    score: float | None = None
+    knowledge_areas: dict[str, float] | None = None
+    recommendations: list[str] | None = None
+    completed_at: str | None = None
+
+
+# Модуль 9: Health Check
+class HealthCheckResponse(BaseModel):
+    status: str
+    time: str
+
+
+# Модуль 10: Root
+class RootResponse(BaseModel):
+    message: str
+    version: str
+    docs: str

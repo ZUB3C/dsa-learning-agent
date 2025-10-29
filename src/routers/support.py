@@ -1,42 +1,66 @@
+import json
 import uuid
-from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
 from ..agents.registry import load_agent
 from ..core.database import get_db_connection, get_or_create_user
-from ..models.schemas import SupportRequest, SupportResponse
+from ..models.schemas import (
+    GetSupportResourcesResponse,
+    SubmitFeedbackRequest,
+    SubmitFeedbackResponse,
+    SupportRequest,
+    SupportResponse,
+)
 
 router = APIRouter(prefix="/api/v1/support", tags=["Support"])
 
 
-@router.post("/request")
-async def request_support(request: SupportRequest) -> SupportResponse:
-    """Запросить психологическую поддержку"""
+@router.post("/get-support")
+async def get_support(request: SupportRequest) -> SupportResponse:
+    """Получить психологическую поддержку"""
 
     try:
         get_or_create_user(request.user_id)
 
-        agent = load_agent("support", language=request.language)
+        # Загружаем агента поддержки
+        support_agent = load_agent("support", language=request.language)
 
-        support_message = await agent.ainvoke({
+        # Генерируем ответ
+        response = await support_agent.ainvoke({
+            "user_message": request.message,
             "emotional_state": request.emotional_state,
-            "message": request.message
+            "user_id": request.user_id
         })
 
-        recommendations = _get_recommendations_by_state(request.emotional_state)
+        # Парсим результат
+        try:
+            support_data = json.loads(response)
+            support_message = support_data.get("message", response)
+            recommendations = support_data.get("recommendations", [])
+        except json.JSONDecodeError:
+            support_message = response
+            recommendations = _generate_default_recommendations(request.emotional_state)
+
+        # Получаем ресурсы
         resources = _get_support_resources(request.language)
 
-        # Сохраняем сессию поддержки
+        # Сохраняем в БД
         session_id = str(uuid.uuid4())
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """INSERT INTO support_sessions
-                   (session_id, user_id, message, emotional_state, support_message)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (session_id, request.user_id, request.message,
-                 request.emotional_state, support_message)
+                   (session_id, user_id, user_message, emotional_state, response, recommendations)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    session_id,
+                    request.user_id,
+                    request.message,
+                    request.emotional_state,
+                    support_message,
+                    json.dumps(recommendations)
+                )
             )
 
         return SupportResponse(
@@ -46,7 +70,7 @@ async def request_support(request: SupportRequest) -> SupportResponse:
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error providing support: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Support error: {e!s}")
 
 
 def _get_recommendations_by_state(emotional_state: str) -> list[str]:
@@ -74,12 +98,7 @@ def _get_recommendations_by_state(emotional_state: str) -> list[str]:
             "Сделайте перерыв и вернитесь к задаче позже"
         ]
     }
-
-    return recommendations_map.get(emotional_state, [
-        "Продолжайте учиться в своем темпе",
-        "Не забывайте отдыхать",
-        "Верьте в свои силы"
-    ])
+    return recommendations_map.get(emotional_state, ["Продолжайте работать в своем темпе"])
 
 
 def _get_support_resources(language: str) -> list[dict[str, str]]:
@@ -113,28 +132,28 @@ def _get_support_resources(language: str) -> list[dict[str, str]]:
 
 
 @router.get("/resources")
-async def get_support_resources() -> dict[str, Any]:
+async def get_support_resources() -> GetSupportResourcesResponse:
     """Получить ресурсы психологической поддержки"""
 
-    return {
-        "articles": [
+    return GetSupportResourcesResponse(
+        articles=[
             {"title": "Как справиться со стрессом при изучении алгоритмов", "url": "#"},
             {"title": "Техники запоминания сложных концепций", "url": "#"}
         ],
-        "exercises": [
+        exercises=[
             {"name": "Дыхательная гимнастика 4-7-8", "duration": "5 минут"},
             {"name": "Медитация осознанности", "duration": "10 минут"}
         ],
-        "tips": [
+        tips=[
             "Учитесь регулярно, но небольшими порциями",
             "Практикуйте активное вспоминание",
             "Объясняйте материал другим"
         ]
-    }
+    )
 
 
 @router.post("/feedback")
-async def submit_feedback(session_id: str, helpful: bool, comments: str = "") -> dict[str, str]:
+async def submit_feedback(request: SubmitFeedbackRequest) -> SubmitFeedbackResponse:
     """Отправить обратную связь о сессии поддержки"""
 
     with get_db_connection() as conn:
@@ -143,7 +162,7 @@ async def submit_feedback(session_id: str, helpful: bool, comments: str = "") ->
             """UPDATE support_sessions
                SET helpful = ?, comments = ?
                WHERE session_id = ?""",
-            (helpful, comments, session_id)
+            (request.helpful, request.comments, request.session_id)
         )
 
-    return {"status": "received"}
+    return SubmitFeedbackResponse(status="received")

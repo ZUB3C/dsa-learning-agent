@@ -5,7 +5,6 @@ import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
 
 DATABASE_PATH = Path(__file__).parent.parent.parent / "app_data.db"
 
@@ -34,23 +33,7 @@ def init_database() -> None:
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id TEXT PRIMARY KEY,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # Таблица первичной оценки
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS assessments (
-                assessment_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id TEXT NOT NULL,
-                session_id TEXT UNIQUE NOT NULL,
-                level TEXT NOT NULL,
-                score REAL NOT NULL,
-                knowledge_areas TEXT,
-                recommendations TEXT,
-                completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(user_id)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
 
@@ -58,34 +41,37 @@ def init_database() -> None:
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS assessment_sessions (
                 session_id TEXT PRIMARY KEY,
-                user_id TEXT NOT NULL,
-                questions TEXT NOT NULL,
+                user_id TEXT,
+                questions TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(user_id)
             )
         """)
 
-        # Таблица сгенерированных тестов
+        # Таблица результатов оценки
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS assessments (
+                assessment_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT,
+                session_id TEXT,
+                level TEXT,
+                score REAL,
+                knowledge_areas TEXT,
+                recommendations TEXT,
+                completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(user_id)
+            )
+        """)
+
+        # Таблица тестов
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS tests (
                 test_id TEXT PRIMARY KEY,
-                topic TEXT NOT NULL,
-                difficulty TEXT NOT NULL,
-                questions TEXT NOT NULL,
+                topic TEXT,
+                difficulty TEXT,
+                questions TEXT,
                 expected_duration INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # Таблица пользовательских тем
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS custom_topics (
-                topic_id TEXT PRIMARY KEY,
-                user_id TEXT NOT NULL,
-                topic_name TEXT NOT NULL,
-                content TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(user_id)
             )
         """)
 
@@ -93,9 +79,9 @@ def init_database() -> None:
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS test_results (
                 result_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                test_id TEXT NOT NULL,
-                user_id TEXT NOT NULL,
-                answers TEXT NOT NULL,
+                test_id TEXT,
+                user_id TEXT,
+                answers TEXT,
                 submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (test_id) REFERENCES tests(test_id),
                 FOREIGN KEY (user_id) REFERENCES users(user_id)
@@ -106,16 +92,26 @@ def init_database() -> None:
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS verifications (
                 verification_id TEXT PRIMARY KEY,
-                test_id TEXT NOT NULL,
-                user_id TEXT NOT NULL,
-                question TEXT NOT NULL,
-                user_answer TEXT NOT NULL,
-                expected_answer TEXT,
-                is_correct BOOLEAN NOT NULL,
-                score REAL NOT NULL,
-                feedback TEXT NOT NULL,
-                verification_details TEXT,
-                language TEXT DEFAULT 'ru',
+                test_id TEXT,
+                user_id TEXT,
+                question TEXT,
+                user_answer TEXT,
+                is_correct BOOLEAN,
+                score REAL,
+                feedback TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (test_id) REFERENCES tests(test_id),
+                FOREIGN KEY (user_id) REFERENCES users(user_id)
+            )
+        """)
+
+        # Таблица пользовательских тем
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS custom_topics (
+                topic_id TEXT PRIMARY KEY,
+                user_id TEXT,
+                topic_name TEXT,
+                content TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(user_id)
             )
@@ -125,10 +121,11 @@ def init_database() -> None:
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS support_sessions (
                 session_id TEXT PRIMARY KEY,
-                user_id TEXT NOT NULL,
-                message TEXT NOT NULL,
-                emotional_state TEXT NOT NULL,
-                support_message TEXT NOT NULL,
+                user_id TEXT,
+                user_message TEXT,
+                emotional_state TEXT,
+                response TEXT,
+                recommendations TEXT,
                 helpful BOOLEAN,
                 comments TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -136,31 +133,12 @@ def init_database() -> None:
             )
         """)
 
-        # Индексы для ускорения запросов
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_assessments_user ON assessments(user_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tests_topic ON tests(topic)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_test_results_user ON test_results(user_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_verifications_user ON verifications(user_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_support_user ON support_sessions(user_id)")
 
-
-def get_or_create_user(user_id: str) -> dict[str, Any]:
+def get_or_create_user(user_id: str) -> None:
     """Получить или создать пользователя"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-
-        # Проверяем существование
-        cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
-        user = cursor.fetchone()
-
-        if user:
-            return dict(user)
-
-        # Создаем нового
         cursor.execute(
-            "INSERT INTO users (user_id) VALUES (?)",
+            "INSERT OR IGNORE INTO users (user_id) VALUES (?)",
             (user_id,)
         )
-
-        cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
-        return dict(cursor.fetchone())

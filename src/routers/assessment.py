@@ -1,6 +1,5 @@
 import json
 import uuid
-from typing import Any
 
 from fastapi import APIRouter
 
@@ -11,6 +10,7 @@ from ..models.schemas import (
     AssessmentStartResponse,
     AssessmentSubmitRequest,
     AssessmentSubmitResponse,
+    GetAssessmentResultsResponse,
 )
 
 router = APIRouter(prefix="/api/v1/assessment", tags=["Assessment"])
@@ -191,7 +191,7 @@ async def submit_assessment(request: AssessmentSubmitRequest) -> AssessmentSubmi
 
 
 @router.get("/results/{user_id}")
-async def get_assessment_results(user_id: str) -> dict[str, Any]:
+async def get_assessment_results(user_id: str) -> GetAssessmentResultsResponse:
     """Получить результаты начальной оценки"""
 
     with get_db_connection() as conn:
@@ -207,15 +207,16 @@ async def get_assessment_results(user_id: str) -> dict[str, Any]:
         result = cursor.fetchone()
 
         if not result:
-            return {
-                "message": "No assessment found for this user",
-                "user_id": user_id
-            }
+            return GetAssessmentResultsResponse(
+                message="No assessment found for this user",
+                user_id=user_id
+            )
 
-        return {
-            "initial_level": result["level"],
-            "score": result["score"],
-            "knowledge_areas": json.loads(result["knowledge_areas"]) if result["knowledge_areas"] else {},
-            "recommendations": json.loads(result["recommendations"]) if result["recommendations"] else [],
-            "completed_at": result["completed_at"]
-        }
+        return GetAssessmentResultsResponse(
+            user_id=user_id,
+            initial_level=result["level"],
+            score=result["score"],
+            knowledge_areas=json.loads(result["knowledge_areas"]) if result["knowledge_areas"] else {},
+            recommendations=json.loads(result["recommendations"]) if result["recommendations"] else [],
+            completed_at=result["completed_at"]
+        )

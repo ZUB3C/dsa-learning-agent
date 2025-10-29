@@ -1,45 +1,56 @@
 import uuid
-from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from langchain_core.documents import Document
 
 from ..agents.llm_router_agent import LLMRouter
-from ..agents.materials_agent import format_retrieved_materials, retrieve_materials
 from ..agents.registry import load_agent
 from ..core.database import get_db_connection, get_or_create_user
 from ..core.vector_store import vector_store_manager
 from ..models.schemas import (
+    AddCustomTopicRequest,
+    AddCustomTopicResponse,
     AskQuestionRequest,
     AskQuestionResponse,
+    GenerateMaterialRequest,
+    GenerateMaterialResponse,
     GetMaterialsRequest,
     GetMaterialsResponse,
+    GetTopicsResponse,
+    MaterialSearchResult,
+    SearchMaterialsRequest,
+    SearchMaterialsResponse,
+    TopicInfo,
 )
 
 router = APIRouter(prefix="/api/v1/materials", tags=["Materials"])
 
 
-@router.post("/get-topic")
-async def get_topic_materials(request: GetMaterialsRequest) -> GetMaterialsResponse:
-    """Получить материалы по теме с адаптацией под уровень пользователя"""
+@router.post("/get-materials")
+async def get_materials(request: GetMaterialsRequest) -> GetMaterialsResponse:
+    """Получить адаптированные учебные материалы"""
 
     try:
-        documents = retrieve_materials(request.topic, request.user_level)
-        retrieved_text = format_retrieved_materials(documents)
+        # Поиск в векторном хранилище
+        documents = vector_store_manager.similarity_search(
+            query=request.topic,
+            k=5
+        )
 
-        agent = load_agent("materials", language=request.language)
+        retrieved_content = "\n\n".join([doc.page_content for doc in documents])
 
-        adapted_content = await agent.ainvoke({
+        # Используем агента для адаптации материала
+        materials_agent = load_agent("materials", language=request.language)
+
+        adapted_content = await materials_agent.ainvoke({
             "topic": request.topic,
             "user_level": request.user_level,
-            "retrieved_materials": retrieved_text
+            "retrieved_materials": retrieved_content
         })
-
-        sources = list({doc.metadata.get("source", "unknown") for doc in documents})
 
         return GetMaterialsResponse(
             content=adapted_content,
-            sources=sources,
+            sources=[doc.metadata.get("source", "unknown") for doc in documents],
             adapted_for_level=request.user_level
         )
 
@@ -49,32 +60,20 @@ async def get_topic_materials(request: GetMaterialsRequest) -> GetMaterialsRespo
 
 @router.post("/ask-question")
 async def ask_question(request: AskQuestionRequest) -> AskQuestionResponse:
-    """Задать вопрос по материалам"""
+    """Задать вопрос по материалу"""
 
     try:
-        documents = retrieve_materials(request.context_topic, request.user_level)
-        retrieved_text = format_retrieved_materials(documents)
+        materials_agent = load_agent("materials", language=request.language)
 
-        agent = load_agent("question-answering", language=request.language)
-
-        answer = await agent.ainvoke({
+        answer = await materials_agent.ainvoke({
             "topic": request.context_topic,
             "user_level": request.user_level,
-            "retrieved_materials": retrieved_text,
             "question": request.question
         })
 
-        related_concepts = []
-        for doc in documents:
-            concepts_str = doc.metadata.get("concepts", "")
-            if concepts_str:
-                related_concepts.extend(concepts_str.split(", "))
-
-        related_concepts = list(set(related_concepts))[:5]
-
         return AskQuestionResponse(
             answer=answer,
-            related_concepts=related_concepts
+            related_concepts=[request.context_topic]
         )
 
     except Exception as e:
@@ -82,21 +81,16 @@ async def ask_question(request: AskQuestionRequest) -> AskQuestionResponse:
 
 
 @router.post("/generate-material")
-async def generate_material(
-        topic: str,
-        format: str,
-        length: str,
-        language: str = "ru"
-) -> dict[str, Any]:
+async def generate_material(request: GenerateMaterialRequest) -> GenerateMaterialResponse:
     """Сгенерировать учебный материал"""
 
     try:
         # Создаем роутер напрямую
-        router_instance = LLMRouter(language=language)
-        selected_model = router_instance.get_model_name(language)
+        router_instance = LLMRouter(language=request.language)
+        selected_model = router_instance.get_model_name(request.language)
 
         # Используем materials agent для генерации контента
-        materials_agent = load_agent("materials", language=language)
+        materials_agent = load_agent("materials", language=request.language)
 
         # Определяем целевой уровень в зависимости от длины
         level_map = {
@@ -104,56 +98,57 @@ async def generate_material(
             "medium": "intermediate",
             "long": "advanced"
         }
-        user_level = level_map.get(length.lower(), "intermediate")
+        user_level = level_map.get(request.length.lower(), "intermediate")
 
         # Генерируем материал
         material_content = await materials_agent.ainvoke({
-            "topic": topic,
+            "topic": request.topic,
             "user_level": user_level,
-            "retrieved_materials": f"Создайте {format} материал по теме '{topic}' длиной {length}",
-            "format": format
+            "retrieved_materials": f"Создайте {request.format} материал по теме '{request.topic}' длиной {request.length}",
+            "format": request.format
         })
 
         # Подсчет слов
         word_count = len(material_content.split())
 
         # Форматируем в зависимости от типа
-        if format.lower() == "summary":
-            formatted_material = f"# Краткое содержание: {topic}\n\n{material_content}"
-        elif format.lower() == "detailed":
-            formatted_material = f"# Подробный материал: {topic}\n\n{material_content}"
-        elif format.lower() == "example":
-            formatted_material = f"# Примеры по теме: {topic}\n\n{material_content}"
+        if request.format.lower() == "summary":
+            formatted_material = f"# Краткое содержание: {request.topic}\n\n{material_content}"
+        elif request.format.lower() == "detailed":
+            formatted_material = f"# Подробный материал: {request.topic}\n\n{material_content}"
+        elif request.format.lower() == "example":
+            formatted_material = f"# Примеры по теме: {request.topic}\n\n{material_content}"
         else:
             formatted_material = material_content
 
-        # Сохраняем материал как пользовательскую тему
+        # Сохраняем сгенерированный материал
+        topic_id = f"generated_{uuid.uuid4()}"
+
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            topic_id = f"generated_{uuid.uuid4()}"
             cursor.execute(
                 """INSERT INTO custom_topics (topic_id, user_id, topic_name, content)
                    VALUES (?, ?, ?, ?)""",
-                (topic_id, "system", f"{format}_{topic}", formatted_material)
+                (topic_id, "system", f"{request.format}_{request.topic}", formatted_material)
             )
 
-        return {
-            "material": formatted_material,
-            "format": format,
-            "word_count": word_count,
-            "model_used": selected_model,
-            "topic_id": topic_id,
-        }
+        return GenerateMaterialResponse(
+            material=formatted_material,
+            format=request.format,
+            word_count=word_count,
+            model_used=selected_model,
+            topic_id=topic_id
+        )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating material: {e!s}")
 
 
 @router.post("/add-custom-topic")
-async def add_custom_topic(topic_name: str, user_id: str, content: str) -> dict[str, str]:
+async def add_custom_topic(request: AddCustomTopicRequest) -> AddCustomTopicResponse:
     """Добавить пользовательскую тему"""
 
-    get_or_create_user(user_id)
+    get_or_create_user(request.user_id)
     topic_id = f"custom_{uuid.uuid4()}"
 
     # Сохраняем в БД
@@ -162,17 +157,17 @@ async def add_custom_topic(topic_name: str, user_id: str, content: str) -> dict[
         cursor.execute(
             """INSERT INTO custom_topics (topic_id, user_id, topic_name, content)
                VALUES (?, ?, ?, ?)""",
-            (topic_id, user_id, topic_name, content)
+            (topic_id, request.user_id, request.topic_name, request.content)
         )
 
     # Добавляем в векторное хранилище
     try:
         document = Document(
-            page_content=content,
+            page_content=request.content,
             metadata={
                 "source": f"custom_topic_{topic_id}",
-                "title": topic_name,
-                "user_id": user_id,
+                "title": request.topic_name,
+                "user_id": request.user_id,
                 "type": "custom"
             }
         )
@@ -180,27 +175,26 @@ async def add_custom_topic(topic_name: str, user_id: str, content: str) -> dict[
     except Exception as e:
         print(f"Warning: Failed to add to vector store: {e}")
 
-    return {"topic_id": topic_id, "status": "added"}
+    return AddCustomTopicResponse(topic_id=topic_id, status="added")
 
 
 @router.get("/topics")
-async def get_topics() -> dict[str, Any]:
+async def get_topics() -> GetTopicsResponse:
     """Получить список доступных тем"""
 
     predefined_topics = [
         "Временная сложность",
         "Пространственная сложность",
-        "Массивы и списки",
-        "Стеки и очереди",
+        "Массивы",
         "Связные списки",
+        "Стеки и очереди",
         "Деревья",
         "Графы",
         "Хеш-таблицы",
-        "Сортировка",
+        "Сортировки",
         "Поиск",
         "Рекурсия",
-        "Динамическое программирование",
-        "Жадные алгоритмы"
+        "Динамическое программирование"
     ]
 
     with get_db_connection() as conn:
@@ -208,46 +202,46 @@ async def get_topics() -> dict[str, Any]:
         cursor.execute("SELECT topic_id, topic_name, user_id FROM custom_topics")
         custom = cursor.fetchall()
 
-        custom_topics = [
-            {
-                "topic_id": t["topic_id"],
-                "topic_name": t["topic_name"],
-                "user_id": t["user_id"]
-            }
+        custom_topics: list[TopicInfo] = [
+            TopicInfo(
+                topic_id=t["topic_id"],
+                topic_name=t["topic_name"],
+                user_id=t["user_id"]
+            )
             for t in custom
         ]
 
-    return {
-        "predefined_topics": predefined_topics,
-        "custom_topics": custom_topics
-    }
+    return GetTopicsResponse(
+        predefined_topics=predefined_topics,
+        custom_topics=custom_topics
+    )
 
 
 @router.post("/search")
-async def search_materials(query: str, filters: dict[str, Any] | None = None) -> dict[str, Any]:
+async def search_materials(request: SearchMaterialsRequest) -> SearchMaterialsResponse:
     """Поиск материалов"""
 
     try:
         documents = vector_store_manager.similarity_search(
-            query=query,
+            query=request.query,
             k=10,
-            filter_dict=filters
+            filter_dict=request.filters
         )
 
-        results = [
-            {
-                "content": doc.page_content[:200] + "...",
-                "metadata": doc.metadata
-            }
+        results: list[MaterialSearchResult] = [
+            MaterialSearchResult(
+                content=doc.page_content[:200] + "...",
+                metadata=doc.metadata
+            )
             for doc in documents
         ]
 
         relevance_scores = [1.0 / (i + 1) for i in range(len(results))]
 
-        return {
-            "results": results,
-            "relevance_scores": relevance_scores
-        }
+        return SearchMaterialsResponse(
+            results=results,
+            relevance_scores=relevance_scores
+        )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search error: {e!s}")
