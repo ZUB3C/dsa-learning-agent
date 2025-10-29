@@ -1260,7 +1260,7 @@ def generate_markdown_report(
             status_icon = "✓" if result.status == "success" else "✗"
             status_text = "SUCCESS" if result.status == "success" else "ERROR"
 
-            markdown += f"### {status_icon} `{result.method} {result.endpoint}`\n\n"
+            markdown += f"### {status_icon} `{result.endpoint}`\n\n"
             markdown += f"**Статус:** {status_text}  \n"
             markdown += f"**Время выполнения:** {result.execution_time:.3f}s  \n"
             markdown += f"**Описание:** {result.description}\n\n"
@@ -1349,7 +1349,7 @@ async def main() -> None:
     markdown_content = generate_markdown_report(all_results, summary)
 
     # Сохранение отчета
-    output_file = Path(__file__).parent.parent.parent / "api_test_report.md"
+    output_file = Path(__file__).parent.parent.parent / "api-examples-report.md"
     output_file.write_text(markdown_content, encoding="utf-8")
 
     # Вывод итоговой статистики
