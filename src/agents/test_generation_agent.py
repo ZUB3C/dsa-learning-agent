@@ -37,7 +37,7 @@ def build_test_generation_agent(language: str = "ru") -> Runnable:
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", TEST_GENERATION_SYSTEM_PROMPT),
-        ("human", "Создай тест.")
+        ("human", "Создай тест."),
     ])
 
     return prompt | llm | StrOutputParser()

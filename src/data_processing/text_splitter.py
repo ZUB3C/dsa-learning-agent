@@ -1,4 +1,3 @@
-
 import re
 
 from langchain_core.documents import Document
@@ -9,22 +8,18 @@ class SmartTextSplitter:
     """Умный разделитель текста с учетом структуры LaTeX документов"""
 
     def __init__(
-            self,
-            chunk_size: int = 1000,
-            chunk_overlap: int = 200,
-            separators: list[str] | None = None
+        self, chunk_size: int = 1000, chunk_overlap: int = 200, separators: list[str] | None = None
     ) -> None:
-
         # Сепараторы с учетом структуры LaTeX документов
         if separators is None:
             separators = [
                 "\n\n\n",  # Разделы
-                "\n\n",    # Параграфы
-                "\n",      # Строки
-                ". ",      # Предложения
-                ", ",      # Фразы
-                " ",       # Слова
-                ""         # Символы
+                "\n\n",  # Параграфы
+                "\n",  # Строки
+                ". ",  # Предложения
+                ", ",  # Фразы
+                " ",  # Слова
+                "",  # Символы
             ]
 
         self.splitter = RecursiveCharacterTextSplitter(
@@ -32,13 +27,11 @@ class SmartTextSplitter:
             chunk_overlap=chunk_overlap,
             separators=separators,
             length_function=len,
-            is_separator_regex=False
+            is_separator_regex=False,
         )
 
     def split_section(
-            self,
-            section_data: dict,
-            parent_hierarchy: list[str] | None = None
+        self, section_data: dict, parent_hierarchy: list[str] | None = None
     ) -> list[Document]:
         """Разделить раздел на чанки с метаданными"""
 
@@ -75,10 +68,7 @@ class SmartTextSplitter:
                 "concepts": ", ".join(concepts),
             }
 
-            doc = Document(
-                page_content=chunk,
-                metadata=metadata
-            )
+            doc = Document(page_content=chunk, metadata=metadata)
             documents.append(doc)
 
         return documents
@@ -107,7 +97,7 @@ class SmartTextSplitter:
             r"\b(жадн[а-я]+ алгоритм[а-я]*)\b",
             r"\b(хеш[а-я]*)\b",
             r"\b(куч[аи])\b",
-            r"\b(обход[а-я]*)\b"
+            r"\b(обход[а-я]*)\b",
         ]
 
         for pattern in concept_patterns:

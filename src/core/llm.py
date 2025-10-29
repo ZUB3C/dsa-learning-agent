@@ -48,9 +48,6 @@ def get_llm_by_language(language: str) -> BaseChatModel:
 
 def simple_chain(system_msg: str, language: str = "ru") -> ChatPromptTemplate:
     """Создать простую цепочку с системным промптом"""
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_msg),
-        ("human", "{input}")
-    ])
+    prompt = ChatPromptTemplate.from_messages([("system", system_msg), ("human", "{input}")])
     llm = get_llm_by_language(language)
     return prompt | llm | StrOutputParser()

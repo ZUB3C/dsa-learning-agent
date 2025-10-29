@@ -21,27 +21,22 @@ def main() -> None:
         "--pdf",
         type=str,
         default="algobook.pdf",
-        help="Путь к PDF файлу (по умолчанию: algobook.pdf)"
+        help="Путь к PDF файлу (по умолчанию: algobook.pdf)",
     )
 
     parser.add_argument(
-        "--clear",
-        action="store_true",
-        help="Очистить существующую коллекцию перед заполнением"
+        "--clear", action="store_true", help="Очистить существующую коллекцию перед заполнением"
     )
 
     parser.add_argument(
-        "--chunk-size",
-        type=int,
-        default=1000,
-        help="Размер чанка в символах (по умолчанию: 1000)"
+        "--chunk-size", type=int, default=1000, help="Размер чанка в символах (по умолчанию: 1000)"
     )
 
     parser.add_argument(
         "--chunk-overlap",
         type=int,
         default=200,
-        help="Перекрытие чанков в символах (по умолчанию: 200)"
+        help="Перекрытие чанков в символах (по умолчанию: 200)",
     )
 
     args = parser.parse_args()
@@ -65,7 +60,7 @@ def main() -> None:
             pdf_path=str(pdf_path),
             clear_existing=args.clear,
             chunk_size=args.chunk_size,
-            chunk_overlap=args.chunk_overlap
+            chunk_overlap=args.chunk_overlap,
         )
 
         if result["status"] == "success":
@@ -82,6 +77,7 @@ def main() -> None:
     except Exception as e:
         print(f"\n❌ Критическая ошибка: {e}")
         import traceback  # noqa: PLC0415
+
         traceback.print_exc()
         sys.exit(1)
 

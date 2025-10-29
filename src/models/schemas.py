@@ -243,7 +243,9 @@ class RouteRequestResponse(BaseModel):
 class SupportRequest(BaseModel):
     user_id: str
     message: str
-    emotional_state: str = Field(description="Эмоциональное состояние (stressed, confused, motivated, etc.)")
+    emotional_state: str = Field(
+        description="Эмоциональное состояние (stressed, confused, motivated, etc.)"
+    )
     language: str = "ru"
 
 

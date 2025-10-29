@@ -21,7 +21,9 @@ class LLMRouter:
         """Инициализация роутера с языком по умолчанию"""
         self.default_language = language
 
-    def select_llm(self, language: str | None = None, request_type: RequestType | None = None) -> Runnable:
+    def select_llm(
+        self, language: str | None = None, request_type: RequestType | None = None
+    ) -> Runnable:
         """Выбрать подходящую LLM"""
 
         lang = language or self.default_language
@@ -58,19 +60,20 @@ class LLMRouter:
             "selected_model": model_name,
             "reasoning": f"Selected {model_name} for {request_type} in {language}",
             "confidence": 0.9,
-            "alternative_models": []
+            "alternative_models": [],
         }
 
         import json
+
         return json.dumps(result, ensure_ascii=False)
 
     async def generate_content(
-            self,
-            request_type: RequestType,
-            content: str,
-            language: str | None = None,
-            system_prompt: str = "",
-            parameters: dict[str, Any] | None = None
+        self,
+        request_type: RequestType,
+        content: str,
+        language: str | None = None,
+        system_prompt: str = "",
+        parameters: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Генерировать контент с помощью выбранной LLM"""
 
@@ -78,11 +81,13 @@ class LLMRouter:
         llm = self.select_llm(lang, request_type)
 
         if not system_prompt:
-            system_prompt = "You are a helpful AI assistant specialized in algorithms and data structures."
+            system_prompt = (
+                "You are a helpful AI assistant specialized in algorithms and data structures."
+            )
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
-            ("human", "{input}")
+            ("human", "{input}"),
         ])
 
         chain = prompt | llm | StrOutputParser()
@@ -93,5 +98,5 @@ class LLMRouter:
             "generated_content": result,
             "model_used": self.get_model_name(lang),
             "request_type": request_type,
-            "language": lang
+            "language": lang,
         }

@@ -36,7 +36,7 @@ class PDFParser:
                 "level": level,
                 "title": title.strip(),
                 "page": page,
-                "type": self._classify_heading(level, title)
+                "type": self._classify_heading(level, title),
             })
 
         return structured_toc
@@ -60,9 +60,7 @@ class PDFParser:
             for line in lines:
                 # Паттерн для лекций (уровень 1)
                 lecture_match = re.match(
-                    r"^Лекция\s+(\d+)[\.\s]+(.*?)\s+\.{2,}\s*(\d+)",
-                    line,
-                    re.IGNORECASE
+                    r"^Лекция\s+(\d+)[\.\s]+(.*?)\s+\.{2,}\s*(\d+)", line, re.IGNORECASE
                 )
                 if lecture_match:
                     title = f"Лекция {lecture_match.group(1)}: {lecture_match.group(2).strip()}"
@@ -71,24 +69,22 @@ class PDFParser:
                     continue
 
                 # Паттерн для разделов (уровень 2)
-                section_match = re.match(
-                    r"^(\d+)\.(\d+)[\.\s]+(.*?)\s+\.{2,}\s*(\d+)",
-                    line
-                )
+                section_match = re.match(r"^(\d+)\.(\d+)[\.\s]+(.*?)\s+\.{2,}\s*(\d+)", line)
                 if section_match:
-                    title = f"{section_match.group(1)}.{section_match.group(2)} {section_match.group(3).strip()}"  # noqa: E501
+                    title = f"{section_match.group(1)}.{section_match.group(2)} {section_match.group(3).strip()}"
                     page = int(section_match.group(4))
                     toc.append((2, title, page))
                     continue
 
                 # Паттерн для подразделов (уровень 3)
                 subsection_match = re.match(
-                    r"^(\d+)\.(\d+)\.(\d+)[\.\s]+(.*?)\s+\.{2,}\s*(\d+)",
-                    line
+                    r"^(\d+)\.(\d+)\.(\d+)[\.\s]+(.*?)\s+\.{2,}\s*(\d+)", line
                 )
                 if subsection_match:
-                    title = (f"{subsection_match.group(1)}.{subsection_match.group(2)}."
-                            f"{subsection_match.group(3)} {subsection_match.group(4).strip()}")
+                    title = (
+                        f"{subsection_match.group(1)}.{subsection_match.group(2)}."
+                        f"{subsection_match.group(3)} {subsection_match.group(4).strip()}"
+                    )
                     page = int(subsection_match.group(5))
                     toc.append((3, title, page))
                     continue
@@ -139,7 +135,7 @@ class PDFParser:
                 "start_page": start_page,
                 "end_page": end_page,
                 "content": content,
-                "type": self._classify_heading(level, title)
+                "type": self._classify_heading(level, title),
             })
 
         return sections_content
@@ -182,8 +178,10 @@ class PDFParser:
     def __enter__(self) -> None:
         return self
 
-    def __exit__(self, exc_type: type[BaseException] | None,
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
         exc_value: BaseException | None,
         exc_traceback: TracebackType | None,
-) -> None:
+    ) -> None:
         self.close()

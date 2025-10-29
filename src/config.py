@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     # RAG settings
     rag_top_k: int = Field(alias="RAG_TOP_K", default=3)
 
+    # Database settings
+    database_url: str = Field(alias="DATABASE_URL", default="sqlite:///./app_data.db")
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

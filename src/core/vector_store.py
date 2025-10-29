@@ -17,13 +17,13 @@ class VectorStoreManager:
 
         self.client = chromadb.PersistentClient(
             path=settings.chroma_persist_directory,
-            settings=ChromaSettings(anonymized_telemetry=False)
+            settings=ChromaSettings(anonymized_telemetry=False),
         )
 
         self.vectorstore = Chroma(
             client=self.client,
             collection_name=settings.chroma_collection_name,
-            embedding_function=self.embeddings
+            embedding_function=self.embeddings,
         )
 
     def add_documents(self, documents: list[Document]) -> list[str]:
@@ -33,8 +33,7 @@ class VectorStoreManager:
         filtered_documents = []
         for doc in documents:
             filtered_doc = Document(
-                page_content=doc.page_content,
-                metadata=self._clean_metadata(doc.metadata)
+                page_content=doc.page_content, metadata=self._clean_metadata(doc.metadata)
             )
             filtered_documents.append(filtered_doc)
 
@@ -61,17 +60,10 @@ class VectorStoreManager:
         return cleaned
 
     def similarity_search(
-            self,
-            query: str,
-            k: int = settings.rag_top_k,
-            filter_dict: dict | None = None
+        self, query: str, k: int = settings.rag_top_k, filter_dict: dict | None = None
     ) -> list[Document]:
         """Поиск похожих документов"""
-        return self.vectorstore.similarity_search(
-            query=query,
-            k=k,
-            filter=filter_dict
-        )
+        return self.vectorstore.similarity_search(query=query, k=k, filter=filter_dict)
 
     def delete_collection(self) -> None:
         """Удалить коллекцию"""
@@ -84,13 +76,10 @@ class VectorStoreManager:
             return {
                 "name": collection.name,
                 "count": collection.count(),
-                "metadata": collection.metadata
+                "metadata": collection.metadata,
             }
         except Exception as e:
-            return {
-                "error": str(e),
-                "count": 0
-            }
+            return {"error": str(e), "count": 0}
 
     def collection_exists(self) -> bool:
         """Проверить существование коллекции"""

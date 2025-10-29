@@ -25,7 +25,7 @@ async def check_test(request: TestVerificationRequest) -> TestVerificationRespon
         primary_result = await primary_agent.ainvoke({
             "question": request.question,
             "expected_answer": request.expected_answer or "",
-            "user_answer": request.user_answer
+            "user_answer": request.user_answer,
         })
 
         try:
@@ -38,7 +38,7 @@ async def check_test(request: TestVerificationRequest) -> TestVerificationRespon
         secondary_result = await secondary_agent.ainvoke({
             "primary_evaluation": json.dumps(primary_eval, ensure_ascii=False),
             "question": request.question,
-            "user_answer": request.user_answer
+            "user_answer": request.user_answer,
         })
 
         try:
@@ -53,8 +53,7 @@ async def check_test(request: TestVerificationRequest) -> TestVerificationRespon
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT user_id FROM test_results WHERE test_id = ? LIMIT 1",
-                (request.test_id,)
+                "SELECT user_id FROM test_results WHERE test_id = ? LIMIT 1", (request.test_id,)
             )
             test_result = cursor.fetchone()
             user_id = test_result["user_id"] if test_result else "unknown"
@@ -83,10 +82,10 @@ async def check_test(request: TestVerificationRequest) -> TestVerificationRespon
                         "primary_score": primary_eval.get("score", 0),
                         "secondary_score": secondary_eval.get("final_score", 0),
                         "agree_with_primary": secondary_eval.get("agree_with_primary", True),
-                        "verification_notes": secondary_eval.get("verification_notes", "")
+                        "verification_notes": secondary_eval.get("verification_notes", ""),
                     }),
-                    request.language
-                )
+                    request.language,
+                ),
             )
 
         return TestVerificationResponse(
@@ -98,8 +97,8 @@ async def check_test(request: TestVerificationRequest) -> TestVerificationRespon
                 "primary_score": primary_eval.get("score", 0),
                 "secondary_score": secondary_eval.get("final_score", 0),
                 "agree_with_primary": secondary_eval.get("agree_with_primary", True),
-                "verification_notes": secondary_eval.get("verification_notes", "")
-            }
+                "verification_notes": secondary_eval.get("verification_notes", ""),
+            },
         )
 
     except Exception as e:
@@ -117,7 +116,7 @@ async def get_verification_history(user_id: str) -> GetVerificationHistoryRespon
                FROM verifications
                WHERE user_id = ?
                ORDER BY created_at DESC""",
-            (user_id,)
+            (user_id,),
         )
         verifications = cursor.fetchall()
 
@@ -128,7 +127,7 @@ async def get_verification_history(user_id: str) -> GetVerificationHistoryRespon
                 question=v["question"],
                 score=v["score"],
                 is_correct=bool(v["is_correct"]),
-                created_at=v["created_at"]
+                created_at=v["created_at"],
             )
             for v in verifications
         ]
@@ -136,7 +135,5 @@ async def get_verification_history(user_id: str) -> GetVerificationHistoryRespon
         average_score = sum(t.score for t in tests_list) / len(tests_list) if tests_list else 0.0
 
         return GetVerificationHistoryResponse(
-            tests=tests_list,
-            average_score=average_score,
-            total_tests=len(tests_list)
+            tests=tests_list, average_score=average_score, total_tests=len(tests_list)
         )

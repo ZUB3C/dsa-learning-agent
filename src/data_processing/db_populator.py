@@ -19,19 +19,15 @@ class DatabasePopulator:
     """Класс для заполнения ChromaDB данными из PDF"""
 
     def __init__(
-            self,
-            pdf_path: str | Path,
-            vector_store_manager: VectorStoreManager,
-            chunk_size: int = 1000,
-            chunk_overlap: int = 200
+        self,
+        pdf_path: str | Path,
+        vector_store_manager: VectorStoreManager,
+        chunk_size: int = 1000,
+        chunk_overlap: int = 200,
     ) -> None:
-
         self.pdf_path = Path(pdf_path)
         self.vector_store = vector_store_manager
-        self.text_splitter = SmartTextSplitter(
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap
-        )
+        self.text_splitter = SmartTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 
     def populate(self, clear_existing: bool = False) -> dict:
         """Заполнить базу данных материалами из PDF"""
@@ -42,6 +38,7 @@ class DatabasePopulator:
                 self.vector_store.delete_collection()
                 # Пересоздаем vector store после удаления
                 from ..core.vector_store import VectorStoreManager
+
                 self.vector_store = VectorStoreManager()
             except Exception as e:
                 logger.warning(f"Не удалось удалить коллекцию: {e}")
@@ -96,7 +93,7 @@ class DatabasePopulator:
                 "status": "success",
                 "total_sections": len(sections),
                 "total_documents": len(filtered_documents),
-                "document_ids": doc_ids
+                "document_ids": doc_ids,
             }
         except Exception as e:
             logger.exception(f"Ошибка при добавлении документов: {e}")
@@ -104,7 +101,7 @@ class DatabasePopulator:
                 "status": "error",
                 "error": str(e),
                 "total_sections": len(sections),
-                "total_documents": len(filtered_documents)
+                "total_documents": len(filtered_documents),
             }
 
     def _build_hierarchy(self, sections: list[dict], current_index: int) -> list[str]:
@@ -132,10 +129,10 @@ class DatabasePopulator:
 
 
 def populate_from_pdf(
-        pdf_path: str = "algobook.pdf",
-        clear_existing: bool = False,
-        chunk_size: int = 1000,
-        chunk_overlap: int = 200
+    pdf_path: str = "algobook.pdf",
+    clear_existing: bool = False,
+    chunk_size: int = 1000,
+    chunk_overlap: int = 200,
 ) -> dict:
     """
     Удобная функция для заполнения БД из PDF
@@ -154,7 +151,7 @@ def populate_from_pdf(
         pdf_path=pdf_path,
         vector_store_manager=vector_store_manager,
         chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap
+        chunk_overlap=chunk_overlap,
     )
 
     return populator.populate(clear_existing=clear_existing)

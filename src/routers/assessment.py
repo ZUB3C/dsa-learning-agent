@@ -25,24 +25,24 @@ ASSESSMENT_QUESTIONS = [
             "Время работы программы на конкретном компьютере",
             "Оценка количества операций в зависимости от размера входных данных",
             "Размер памяти, занимаемой программой",
-            "Скорость работы процессора"
+            "Скорость работы процессора",
         ],
         "correct_answer": 1,
-        "topic": "complexity"
+        "topic": "complexity",
     },
     {
         "question_id": 2,
         "question_text": "Какая структура данных использует принцип LIFO (Last In First Out)?",
         "options": ["Очередь", "Стек", "Список", "Дерево"],
         "correct_answer": 1,
-        "topic": "data_structures"
+        "topic": "data_structures",
     },
     {
         "question_id": 3,
         "question_text": "Какова временная сложность бинарного поиска?",
         "options": ["O(n)", "O(log n)", "O(n²)", "O(1)"],
         "correct_answer": 1,
-        "topic": "algorithms"
+        "topic": "algorithms",
     },
     {
         "question_id": 4,
@@ -51,18 +51,23 @@ ASSESSMENT_QUESTIONS = [
             "Цикл в программе",
             "Функция, которая вызывает сама себя",
             "Сортировка массива",
-            "Поиск элемента в списке"
+            "Поиск элемента в списке",
         ],
         "correct_answer": 1,
-        "topic": "basics"
+        "topic": "basics",
     },
     {
         "question_id": 5,
         "question_text": "Какая из этих сортировок имеет наилучшую среднюю временную сложность?",
-        "options": ["Пузырьковая сортировка", "Быстрая сортировка", "Сортировка вставками", "Сортировка выбором"],
+        "options": [
+            "Пузырьковая сортировка",
+            "Быстрая сортировка",
+            "Сортировка вставками",
+            "Сортировка выбором",
+        ],
         "correct_answer": 1,
-        "topic": "sorting"
-    }
+        "topic": "sorting",
+    },
 ]
 
 
@@ -76,9 +81,7 @@ async def start_assessment(request: AssessmentStartRequest) -> AssessmentStartRe
 
     questions = [
         AssessmentQuestion(
-            question_id=q["question_id"],
-            question_text=q["question_text"],
-            options=q["options"]
+            question_id=q["question_id"], question_text=q["question_text"], options=q["options"]
         )
         for q in ASSESSMENT_QUESTIONS
     ]
@@ -88,13 +91,10 @@ async def start_assessment(request: AssessmentStartRequest) -> AssessmentStartRe
         cursor.execute(
             """INSERT INTO assessment_sessions (session_id, user_id, questions)
                VALUES (?, ?, ?)""",
-            (session_id, request.user_id, json.dumps(ASSESSMENT_QUESTIONS))
+            (session_id, request.user_id, json.dumps(ASSESSMENT_QUESTIONS)),
         )
 
-    return AssessmentStartResponse(
-        test_questions=questions,
-        session_id=session_id
-    )
+    return AssessmentStartResponse(test_questions=questions, session_id=session_id)
 
 
 @router.post("/submit")
@@ -105,7 +105,7 @@ async def submit_assessment(request: AssessmentSubmitRequest) -> AssessmentSubmi
         cursor = conn.cursor()
         cursor.execute(
             "SELECT user_id, questions FROM assessment_sessions WHERE session_id = ?",
-            (request.session_id,)
+            (request.session_id,),
         )
         session = cursor.fetchone()
 
@@ -146,25 +146,24 @@ async def submit_assessment(request: AssessmentSubmitRequest) -> AssessmentSubmi
         level = "beginner"
 
     knowledge_areas = {
-        topic: sum(scores) / len(scores) * 100
-        for topic, scores in topic_scores.items()
+        topic: sum(scores) / len(scores) * 100 for topic, scores in topic_scores.items()
     }
 
     recommendations = []
     if level == "beginner":
         recommendations.extend([
             "Рекомендуется начать с основ: временная и пространственная сложность",
-            "Изучите базовые структуры данных: массивы, списки, стеки, очереди"
+            "Изучите базовые структуры данных: массивы, списки, стеки, очереди",
         ])
     elif level == "intermediate":
         recommendations.extend([
             "Углубите знания по сложным структурам данных: деревья, графы, хеш-таблицы",
-            "Практикуйтесь в решении алгоритмических задач средней сложности"
+            "Практикуйтесь в решении алгоритмических задач средней сложности",
         ])
     else:
         recommendations.extend([
             "Переходите к продвинутым темам: динамическое программирование, жадные алгоритмы",
-            "Решайте сложные задачи и участвуйте в соревнованиях по программированию"
+            "Решайте сложные задачи и участвуйте в соревнованиях по программированию",
         ])
 
     with get_db_connection() as conn:
@@ -179,14 +178,12 @@ async def submit_assessment(request: AssessmentSubmitRequest) -> AssessmentSubmi
                 level,
                 percentage,
                 json.dumps(knowledge_areas),
-                json.dumps(recommendations)
-            )
+                json.dumps(recommendations),
+            ),
         )
 
     return AssessmentSubmitResponse(
-        level=level,
-        knowledge_areas=knowledge_areas,
-        recommendations=recommendations
+        level=level, knowledge_areas=knowledge_areas, recommendations=recommendations
     )
 
 
@@ -202,21 +199,24 @@ async def get_assessment_results(user_id: str) -> GetAssessmentResultsResponse:
                WHERE user_id = ?
                ORDER BY completed_at DESC
                LIMIT 1""",
-            (user_id,)
+            (user_id,),
         )
         result = cursor.fetchone()
 
         if not result:
             return GetAssessmentResultsResponse(
-                message="No assessment found for this user",
-                user_id=user_id
+                message="No assessment found for this user", user_id=user_id
             )
 
         return GetAssessmentResultsResponse(
             user_id=user_id,
             initial_level=result["level"],
             score=result["score"],
-            knowledge_areas=json.loads(result["knowledge_areas"]) if result["knowledge_areas"] else {},
-            recommendations=json.loads(result["recommendations"]) if result["recommendations"] else [],
-            completed_at=result["completed_at"]
+            knowledge_areas=json.loads(result["knowledge_areas"])
+            if result["knowledge_areas"]
+            else {},
+            recommendations=json.loads(result["recommendations"])
+            if result["recommendations"]
+            else [],
+            completed_at=result["completed_at"],
         )

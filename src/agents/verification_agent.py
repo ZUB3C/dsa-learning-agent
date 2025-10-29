@@ -34,7 +34,7 @@ def build_verification_agent(language: str = "ru") -> Runnable:
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", VERIFICATION_SYSTEM_PROMPT),
-        ("human", "Проверь ответ.")
+        ("human", "Проверь ответ."),
     ])
 
     return prompt | llm | StrOutputParser()
@@ -50,7 +50,9 @@ def build_secondary_verification_agent(language: str = "ru") -> Runnable:
         llm = get_gigachat_llm()
 
     secondary_prompt = ChatPromptTemplate.from_messages([
-        ("system", """Ты - независимый эксперт по проверке оценок ответов на задачи по АиСД.
+        (
+            "system",
+            """Ты - независимый эксперт по проверке оценок ответов на задачи по АиСД.
 
 Твоя задача - проверить корректность первичной оценки другой модели.
 
@@ -65,8 +67,9 @@ def build_secondary_verification_agent(language: str = "ru") -> Runnable:
   "final_score": <число от 0 до 100>,
   "final_feedback": "<итоговая обратная связь>",
   "verification_notes": "<замечания по первичной проверке, если есть>"
-}}"""),
-        ("human", "Проверь оценку.")
+}}""",
+        ),
+        ("human", "Проверь оценку."),
     ])
 
     return secondary_prompt | llm | StrOutputParser()

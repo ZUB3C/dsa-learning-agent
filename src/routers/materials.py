@@ -32,10 +32,7 @@ async def get_materials(request: GetMaterialsRequest) -> GetMaterialsResponse:
 
     try:
         # Поиск в векторном хранилище
-        documents = vector_store_manager.similarity_search(
-            query=request.topic,
-            k=5
-        )
+        documents = vector_store_manager.similarity_search(query=request.topic, k=5)
 
         retrieved_content = "\n\n".join([doc.page_content for doc in documents])
 
@@ -45,13 +42,13 @@ async def get_materials(request: GetMaterialsRequest) -> GetMaterialsResponse:
         adapted_content = await materials_agent.ainvoke({
             "topic": request.topic,
             "user_level": request.user_level,
-            "retrieved_materials": retrieved_content
+            "retrieved_materials": retrieved_content,
         })
 
         return GetMaterialsResponse(
             content=adapted_content,
             sources=[doc.metadata.get("source", "unknown") for doc in documents],
-            adapted_for_level=request.user_level
+            adapted_for_level=request.user_level,
         )
 
     except Exception as e:
@@ -68,13 +65,10 @@ async def ask_question(request: AskQuestionRequest) -> AskQuestionResponse:
         answer = await materials_agent.ainvoke({
             "topic": request.context_topic,
             "user_level": request.user_level,
-            "question": request.question
+            "question": request.question,
         })
 
-        return AskQuestionResponse(
-            answer=answer,
-            related_concepts=[request.context_topic]
-        )
+        return AskQuestionResponse(answer=answer, related_concepts=[request.context_topic])
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error answering question: {e!s}")
@@ -93,11 +87,7 @@ async def generate_material(request: GenerateMaterialRequest) -> GenerateMateria
         materials_agent = load_agent("materials", language=request.language)
 
         # Определяем целевой уровень в зависимости от длины
-        level_map = {
-            "short": "beginner",
-            "medium": "intermediate",
-            "long": "advanced"
-        }
+        level_map = {"short": "beginner", "medium": "intermediate", "long": "advanced"}
         user_level = level_map.get(request.length.lower(), "intermediate")
 
         # Генерируем материал
@@ -105,7 +95,7 @@ async def generate_material(request: GenerateMaterialRequest) -> GenerateMateria
             "topic": request.topic,
             "user_level": user_level,
             "retrieved_materials": f"Создайте {request.format} материал по теме '{request.topic}' длиной {request.length}",
-            "format": request.format
+            "format": request.format,
         })
 
         # Подсчет слов
@@ -129,7 +119,7 @@ async def generate_material(request: GenerateMaterialRequest) -> GenerateMateria
             cursor.execute(
                 """INSERT INTO custom_topics (topic_id, user_id, topic_name, content)
                    VALUES (?, ?, ?, ?)""",
-                (topic_id, "system", f"{request.format}_{request.topic}", formatted_material)
+                (topic_id, "system", f"{request.format}_{request.topic}", formatted_material),
             )
 
         return GenerateMaterialResponse(
@@ -137,7 +127,7 @@ async def generate_material(request: GenerateMaterialRequest) -> GenerateMateria
             format=request.format,
             word_count=word_count,
             model_used=selected_model,
-            topic_id=topic_id
+            topic_id=topic_id,
         )
 
     except Exception as e:
@@ -157,7 +147,7 @@ async def add_custom_topic(request: AddCustomTopicRequest) -> AddCustomTopicResp
         cursor.execute(
             """INSERT INTO custom_topics (topic_id, user_id, topic_name, content)
                VALUES (?, ?, ?, ?)""",
-            (topic_id, request.user_id, request.topic_name, request.content)
+            (topic_id, request.user_id, request.topic_name, request.content),
         )
 
     # Добавляем в векторное хранилище
@@ -168,8 +158,8 @@ async def add_custom_topic(request: AddCustomTopicRequest) -> AddCustomTopicResp
                 "source": f"custom_topic_{topic_id}",
                 "title": request.topic_name,
                 "user_id": request.user_id,
-                "type": "custom"
-            }
+                "type": "custom",
+            },
         )
         vector_store_manager.add_documents([document])
     except Exception as e:
@@ -194,7 +184,7 @@ async def get_topics() -> GetTopicsResponse:
         "Сортировки",
         "Поиск",
         "Рекурсия",
-        "Динамическое программирование"
+        "Динамическое программирование",
     ]
 
     with get_db_connection() as conn:
@@ -203,18 +193,11 @@ async def get_topics() -> GetTopicsResponse:
         custom = cursor.fetchall()
 
         custom_topics: list[TopicInfo] = [
-            TopicInfo(
-                topic_id=t["topic_id"],
-                topic_name=t["topic_name"],
-                user_id=t["user_id"]
-            )
+            TopicInfo(topic_id=t["topic_id"], topic_name=t["topic_name"], user_id=t["user_id"])
             for t in custom
         ]
 
-    return GetTopicsResponse(
-        predefined_topics=predefined_topics,
-        custom_topics=custom_topics
-    )
+    return GetTopicsResponse(predefined_topics=predefined_topics, custom_topics=custom_topics)
 
 
 @router.post("/search")
@@ -223,25 +206,17 @@ async def search_materials(request: SearchMaterialsRequest) -> SearchMaterialsRe
 
     try:
         documents = vector_store_manager.similarity_search(
-            query=request.query,
-            k=10,
-            filter_dict=request.filters
+            query=request.query, k=10, filter_dict=request.filters
         )
 
         results: list[MaterialSearchResult] = [
-            MaterialSearchResult(
-                content=doc.page_content[:200] + "...",
-                metadata=doc.metadata
-            )
+            MaterialSearchResult(content=doc.page_content[:200] + "...", metadata=doc.metadata)
             for doc in documents
         ]
 
         relevance_scores = [1.0 / (i + 1) for i in range(len(results))]
 
-        return SearchMaterialsResponse(
-            results=results,
-            relevance_scores=relevance_scores
-        )
+        return SearchMaterialsResponse(results=results, relevance_scores=relevance_scores)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search error: {e!s}")

@@ -25,7 +25,7 @@ def build_support_agent(language: str = "ru") -> Runnable:
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", SUPPORT_SYSTEM_PROMPT),
-        ("human", "Окажи поддержку.")
+        ("human", "Окажи поддержку."),
     ])
 
     return prompt | llm | StrOutputParser()

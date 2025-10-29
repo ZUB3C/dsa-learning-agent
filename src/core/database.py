@@ -1,6 +1,7 @@
 """
 Модуль для работы с SQLite базой данных
 """
+
 import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -138,7 +139,4 @@ def get_or_create_user(user_id: str) -> None:
     """Получить или создать пользователя"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            "INSERT OR IGNORE INTO users (user_id) VALUES (?)",
-            (user_id,)
-        )
+        cursor.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))

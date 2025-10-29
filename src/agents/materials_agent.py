@@ -43,7 +43,7 @@ def build_materials_agent(language: str = "ru") -> Runnable:
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", MATERIALS_SYSTEM_PROMPT),
-        ("human", "Объясни материал.")
+        ("human", "Объясни материал."),
     ])
 
     return prompt | llm | StrOutputParser()
@@ -56,7 +56,7 @@ def build_question_answering_agent(language: str = "ru") -> Runnable:
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", QUESTION_SYSTEM_PROMPT),
-        ("human", "Ответь на вопрос.")
+        ("human", "Ответь на вопрос."),
     ])
 
     return prompt | llm | StrOutputParser()
@@ -70,9 +70,7 @@ def retrieve_materials(topic: str, user_level: str) -> list[Document]:
 
     # Получаем топ-K документов
     return vector_store_manager.similarity_search(
-        query=query,
-        k=settings.rag_top_k,
-        filter_dict={"topic": topic} if topic else None
+        query=query, k=settings.rag_top_k, filter_dict={"topic": topic} if topic else None
     )
 
 

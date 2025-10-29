@@ -39,7 +39,7 @@ async def generate_test(request: GenerateTestRequest) -> GenerateTestResponse:
         test_content = await test_agent.ainvoke({
             "topic": request.topic,
             "difficulty": request.difficulty,
-            "question_count": request.question_count
+            "question_count": request.question_count,
         })
 
         # Парсим результат
@@ -55,7 +55,7 @@ async def generate_test(request: GenerateTestRequest) -> GenerateTestResponse:
                 question_id=q.get("question_id", idx),
                 question_text=q.get("question_text", ""),
                 expected_answer=q.get("expected_answer", ""),
-                key_points=q.get("key_points", [])
+                key_points=q.get("key_points", []),
             )
             for idx, q in enumerate(questions_data, 1)
         ]
@@ -69,13 +69,17 @@ async def generate_test(request: GenerateTestRequest) -> GenerateTestResponse:
             cursor.execute(
                 """INSERT INTO tests (test_id, topic, difficulty, questions, expected_duration)
                    VALUES (?, ?, ?, ?, ?)""",
-                (test_id, request.topic, request.difficulty, json.dumps([q.dict() for q in questions]), expected_duration)
+                (
+                    test_id,
+                    request.topic,
+                    request.difficulty,
+                    json.dumps([q.dict() for q in questions]),
+                    expected_duration,
+                ),
             )
 
         return GenerateTestResponse(
-            test_id=test_id,
-            questions=questions,
-            expected_duration=expected_duration
+            test_id=test_id, questions=questions, expected_duration=expected_duration
         )
 
     except Exception as e:
@@ -114,7 +118,7 @@ async def generate_task(request: GenerateTaskRequest) -> GenerateTaskResponse:
                     topic=request.topic,
                     difficulty=request.difficulty,
                     task_type=request.task_type,
-                    expected_answer=task_question.get("expected_answer")
+                    expected_answer=task_question.get("expected_answer"),
                 )
 
                 # Генерируем подсказки
@@ -139,9 +143,7 @@ async def generate_task(request: GenerateTaskRequest) -> GenerateTaskResponse:
                     )
 
                 return GenerateTaskResponse(
-                    task=task,
-                    solution_hints=hints,
-                    model_used=selected_model
+                    task=task, solution_hints=hints, model_used=selected_model
                 )
 
             msg = "No questions generated"
@@ -155,13 +157,13 @@ async def generate_task(request: GenerateTaskRequest) -> GenerateTaskResponse:
                     description=f"Решите задачу по теме '{request.topic}' уровня сложности '{request.difficulty}'",
                     topic=request.topic,
                     difficulty=request.difficulty,
-                    task_type=request.task_type
+                    task_type=request.task_type,
                 ),
                 solution_hints=[
                     TaskHint(hint_level=1, hint_text=f"Изучите основы темы: {request.topic}"),
-                    TaskHint(hint_level=2, hint_text="Разбейте задачу на подзадачи")
+                    TaskHint(hint_level=2, hint_text="Разбейте задачу на подзадачи"),
                 ],
-                model_used=selected_model
+                model_used=selected_model,
             )
 
     except Exception as e:
@@ -181,13 +183,10 @@ async def submit_test_for_verification(request: SubmitTestRequest) -> SubmitTest
         cursor.execute(
             """INSERT INTO test_results (test_id, user_id, answers)
                VALUES (?, ?, ?)""",
-            (request.test_id, request.user_id, json.dumps(request.answers))
+            (request.test_id, request.user_id, json.dumps(request.answers)),
         )
 
-    return SubmitTestResponse(
-        verification_id=verification_id,
-        status="pending"
-    )
+    return SubmitTestResponse(verification_id=verification_id, status="pending")
 
 
 @router.get("/{test_id}")
@@ -200,7 +199,7 @@ async def get_test(test_id: str) -> GetTestResponse:
             """SELECT test_id, topic, difficulty, questions, expected_duration, created_at
                FROM tests
                WHERE test_id = ?""",
-            (test_id,)
+            (test_id,),
         )
         test = cursor.fetchone()
 
@@ -213,11 +212,9 @@ async def get_test(test_id: str) -> GetTestResponse:
                 "topic": test["topic"],
                 "difficulty": test["difficulty"],
                 "questions": json.loads(test["questions"]),
-                "expected_duration": test["expected_duration"]
+                "expected_duration": test["expected_duration"],
             },
-            metadata={
-                "created_at": test["created_at"]
-            }
+            metadata={"created_at": test["created_at"]},
         )
 
 
@@ -233,7 +230,7 @@ async def get_completed_tests(user_id: str) -> GetCompletedTestsResponse:
                JOIN tests t ON r.test_id = t.test_id
                WHERE r.user_id = ?
                ORDER BY r.submitted_at DESC""",
-            (user_id,)
+            (user_id,),
         )
         results = cursor.fetchall()
 
@@ -243,14 +240,11 @@ async def get_completed_tests(user_id: str) -> GetCompletedTestsResponse:
                 test_id=r["test_id"],
                 topic=r["topic"],
                 difficulty=r["difficulty"],
-                submitted_at=r["submitted_at"]
+                submitted_at=r["submitted_at"],
             )
             for r in results
         ]
 
         return GetCompletedTestsResponse(
-            completed_tests=completed_tests,
-            statistics={
-                "total_completed": len(completed_tests)
-            }
+            completed_tests=completed_tests, statistics={"total_completed": len(completed_tests)}
         )

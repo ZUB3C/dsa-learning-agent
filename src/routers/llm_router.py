@@ -1,4 +1,3 @@
-
 import json
 
 from fastapi import APIRouter, HTTPException
@@ -32,25 +31,19 @@ async def select_and_generate(request: LLMRouterRequest) -> LLMRouterResponse:
             "task": "test-generation",
             "test": "test-generation",
             "question": "materials",
-            "support": "support"
+            "support": "support",
         }
 
         agent_type = agent_map.get(request.request_type, "materials")
         agent = load_agent(agent_type, language=request.language)
 
         # Генерируем контент
-        result = await agent.ainvoke({
-            "content": request.content,
-            **request.parameters
-        })
+        result = await agent.ainvoke({"content": request.content, **request.parameters})
 
         return LLMRouterResponse(
             generated_content=result,
             model_used=selected_model,
-            metadata={
-                "request_type": request.request_type,
-                "agent_type": agent_type
-            }
+            metadata={"request_type": request.request_type, "agent_type": agent_type},
         )
 
     except Exception as e:
@@ -69,8 +62,8 @@ async def get_available_models() -> GetAvailableModelsResponse:
             "material_generation": True,
             "task_generation": True,
             "test_generation": True,
-            "question_answering": True
-        }
+            "question_answering": True,
+        },
     )
 
 
@@ -85,7 +78,7 @@ async def route_request(request: RouteRequestRequest) -> RouteRequestResponse:
             "request_type": request.request_type,
             "content": request.content,
             "context": json.dumps(request.context or {}),
-            "language": request.language
+            "language": request.language,
         })
 
         try:
@@ -96,7 +89,7 @@ async def route_request(request: RouteRequestRequest) -> RouteRequestResponse:
                 selected_model=router_instance.get_model_name(request.language),
                 reasoning="Default model selection",
                 confidence=0.5,
-                alternative_models=[]
+                alternative_models=[],
             )
 
     except Exception as e:

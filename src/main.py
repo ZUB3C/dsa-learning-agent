@@ -8,7 +8,7 @@ from .routers import assessment, health, llm_router, materials, support, tests, 
 app = FastAPI(
     title="АиСД Learning Platform API",
     description="API для платформы изучения алгоритмов и структур данных с агентными системами",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 # CORS middleware
@@ -40,11 +40,7 @@ app.include_router(support.router)
 @app.get("/")
 def root() -> RootResponse:
     """Root endpoint"""
-    return RootResponse(
-        message="DSA Learning Platform API",
-        version="1.0.0",
-        docs="/docs"
-    )
+    return RootResponse(message="DSA Learning Platform API", version="1.0.0", docs="/docs")
 
 
 if __name__ == "__main__":
