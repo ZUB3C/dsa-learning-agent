@@ -4,6 +4,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from ..agents.llm_router_agent import LLMRouter
 from ..agents.registry import load_agent
 from ..core.database import get_db_connection, get_or_create_user
 from ..models.schemas import GenerateTestRequest, GenerateTestResponse, TestQuestion
@@ -65,6 +66,90 @@ async def generate_test(request: GenerateTestRequest) -> GenerateTestResponse:
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating test: {e!s}")
+
+
+@router.post("/generate-task")
+async def generate_task(
+    topic: str, difficulty: str, task_type: str, language: str = "ru"
+) -> dict[str, Any]:
+    """Сгенерировать задачу"""
+
+    try:
+        # Создаем роутер напрямую для определения модели
+        router_instance = LLMRouter(language=language)
+        selected_model = router_instance.get_model_name(language)
+
+        # Генерируем задачу через агента генерации тестов
+        task_agent = load_agent("test-generation", language=language)
+
+        task_result = await task_agent.ainvoke({
+            "topic": topic,
+            "difficulty": difficulty,
+            "task_type": task_type,
+            "question_count": 1,
+        })
+
+        try:
+            task_data = json.loads(task_result)
+
+            # Извлекаем первый вопрос как задачу
+            questions = task_data.get("questions", [])
+            if questions:
+                task_question = questions[0]
+                task = {
+                    "task_id": task_question.get("question_id"),
+                    "description": task_question.get("question_text"),
+                    "topic": topic,
+                    "difficulty": difficulty,
+                    "task_type": task_type,
+                    "expected_answer": task_question.get("expected_answer"),
+                }
+
+                # Генерируем подсказки
+                hints = []
+                key_points = task_question.get("key_points", [])
+                for idx, point in enumerate(key_points[:3], 1):
+                    hints.append({"hint_level": idx, "hint_text": point})
+
+                # Сохраняем задачу в БД
+                with get_db_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        """INSERT INTO tests (test_id, topic, difficulty, questions, expected_duration)
+                           VALUES (?, ?, ?, ?, ?)""",
+                        (
+                            str(task["task_id"]),
+                            topic,
+                            difficulty,
+                            json.dumps([task]),
+                            10,  # 10 минут на задачу
+                        ),
+                    )
+
+                return {"task": task, "solution_hints": hints, "model_used": selected_model}
+
+            msg = "No questions generated"
+            raise ValueError(msg)
+
+        except (json.JSONDecodeError, ValueError):
+            # Fallback: создаем простую задачу
+            return {
+                "task": {
+                    "task_id": f"task_{hash(topic + difficulty)}",
+                    "description": f"Решите задачу по теме '{topic}' уровня сложности '{difficulty}'",
+                    "topic": topic,
+                    "difficulty": difficulty,
+                    "task_type": task_type,
+                },
+                "solution_hints": [
+                    {"hint_level": 1, "hint_text": f"Изучите основы темы: {topic}"},
+                    {"hint_level": 2, "hint_text": "Разбейте задачу на подзадачи"},
+                ],
+                "model_used": selected_model,
+            }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating task: {e!s}")
 
 
 @router.post("/submit-for-verification")
