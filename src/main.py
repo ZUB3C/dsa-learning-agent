@@ -1,4 +1,6 @@
-from fastapi import FastAPI
+import time
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from .core.database import init_database
@@ -19,6 +21,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def latency_header(request: Request, call_next):  # noqa: ANN201
+    start = time.time()
+    resp = await call_next(request)
+    resp.headers["X-Process-Time"] = f"{time.time() - start:.3f}"
+    return resp
 
 
 @app.on_event("startup")
