@@ -1,231 +1,428 @@
 """
-Скрипт для тестирования всех API эндпоинтов
-Генерирует Markdown документацию с описанием, вводом и выводом каждого эндпоинта
+Проверка API эндпоинтов с детализированными результатами и логированием.
 """
 
 import asyncio
 import inspect
 import json
+import logging
 import sys
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-# Добавляем корневую директорию в путь
+from pydantic import BaseModel, Field
+
+# Добавление пути к проекту для импорта модулей
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.routers import assessment, health, llm_router, materials, support, tests, verification
+# Импорт роутеров
+# Импорт всех схем из models
+from ..models.schemas import (
+    # Materials schemas
+    AddCustomTopicRequest,
+    AskQuestionRequest,
+    # Assessment schemas
+    AssessmentStartRequest,
+    AssessmentSubmitRequest,
+    GenerateMaterialRequest,
+    # Tests schemas
+    GenerateTaskRequest,
+    GenerateTestRequest,
+    GetMaterialsRequest,
+    # LLM Router schemas
+    LLMRouterRequest,
+    RouteRequestRequest,
+    SearchMaterialsRequest,
+    SubmitFeedbackRequest,
+    SubmitTestRequest,
+    # Support schemas
+    SupportRequest,
+    # Verification schemas
+    TestVerificationRequest,
+)
+from ..routers import assessment, health, llm_router, materials, support, tests, verification
+
+# Настройка логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler("endpoint_tests.log", encoding="utf-8"),
+    ],
+)
+logger = logging.getLogger(__name__)
 
 
-def extract_docstring(func) -> str:
-    """Извлечь докстринг из функции"""
+# Pydantic модель для результата проверки
+class EndpointTestResult(BaseModel):
+    """Результат проверки одного API эндпоинта."""
+
+    endpoint: str = Field(..., description="URL эндпоинта")
+    method: str = Field(..., description="HTTP метод (GET, POST)")
+    description: str = Field(..., description="Описание функциональности эндпоинта")
+    input_data: dict[str, Any] = Field(default_factory=dict, description="Входные данные")
+    output_data: dict[str, Any] | str = Field(default_factory=dict, description="Выходные данные")
+    status: str = Field(..., description="Статус проверки (success/error)")
+    error_message: str | None = Field(None, description="Сообщение об ошибке")
+    execution_time: float | None = Field(None, description="Время выполнения в секундах")
+    timestamp: datetime = Field(default_factory=datetime.now, description="Время проверки")
+
+
+class EndpointTestSummary(BaseModel):
+    """Общая сводка по результатам тестирования."""
+
+    total_tests: int = Field(..., description="Общее количество тестов")
+    successful_tests: int = Field(..., description="Количество успешных тестов")
+    failed_tests: int = Field(..., description="Количество неудачных тестов")
+    success_rate: float = Field(..., description="Процент успешных тестов")
+    execution_time: float = Field(..., description="Общее время выполнения")
+    timestamp: datetime = Field(default_factory=datetime.now, description="Время генерации отчета")
+
+
+def extract_docstring(func: Any) -> str:
+    """Извлечь docstring из функции."""
     return inspect.getdoc(func) or "Описание отсутствует"
 
 
 def format_json(data: Any) -> str:
-    """Форматировать JSON для вывода"""
+    """Форматировать данные в JSON."""
     try:
         return json.dumps(data, ensure_ascii=False, indent=2)
-    except:
+    except Exception:
         return str(data)
 
 
-async def test_health_endpoints():
-    """Тестирование health endpoints"""
-    results = []
+async def test_health_endpoints() -> list[EndpointTestResult]:
+    """Тестирование health эндпоинтов."""
+    logger.info("=" * 80)
+    logger.info("ТЕСТИРОВАНИЕ: System Health Endpoints")
+    logger.info("=" * 80)
+
+    results: list[EndpointTestResult] = []
 
     # GET /health/
+    logger.info("Тест: GET /health/")
+    start_time = asyncio.get_event_loop().time()
     try:
         result = health.health_check()
-        results.append({
-            "endpoint": "GET /health/",
-            "description": extract_docstring(health.health_check),
-            "input": "Без параметров",
-            "output": format_json(result.model_dump()),
-            "status": "success",
-        })
-    except Exception as e:
-        results.append({
-            "endpoint": "GET /health/",
-            "description": extract_docstring(health.health_check),
-            "input": "Без параметров",
-            "output": f"Error: {e!s}",
-            "status": "error",
-        })
+        execution_time = asyncio.get_event_loop().time() - start_time
 
+        test_result = EndpointTestResult(
+            endpoint="GET /health/",
+            method="GET",
+            description=extract_docstring(health.health_check),
+            input_data={},
+            output_data=result.model_dump(),
+            status="success",
+            execution_time=execution_time,
+        )
+        logger.info(f"✓ Успешно. Статус: {result.status}. Время: {execution_time:.3f}s")
+        results.append(test_result)
+    except Exception as e:
+        execution_time = asyncio.get_event_loop().time() - start_time
+        test_result = EndpointTestResult(
+            endpoint="GET /health/",
+            method="GET",
+            description=extract_docstring(health.health_check),
+            input_data={},
+            output_data={},
+            status="error",
+            error_message=str(e),
+            execution_time=execution_time,
+        )
+        logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+        results.append(test_result)
+
+    logger.info("")
     return results
 
 
-async def test_assessment_endpoints():
-    """Тестирование assessment endpoints"""
-    from src.models.schemas import AssessmentStartRequest, AssessmentSubmitRequest
+async def test_assessment_endpoints() -> list[EndpointTestResult]:
+    """Тестирование assessment эндпоинтов."""
+    logger.info("=" * 80)
+    logger.info("ТЕСТИРОВАНИЕ: Assessment Endpoints")
+    logger.info("=" * 80)
 
-    results = []
+    results: list[EndpointTestResult] = []
+    session_id = None
+    test_user_id = f"test_user_{uuid.uuid4().hex[:8]}"
 
     # POST /api/v1/assessment/start
+    logger.info(f"Тест: POST /api/v1/assessment/start для пользователя {test_user_id}")
+    start_time = asyncio.get_event_loop().time()
     try:
-        request = AssessmentStartRequest(user_id="test_user_123")
+        request = AssessmentStartRequest(user_id=test_user_id)
         result = await assessment.start_assessment(request)
-        session_id = result.session_id
+        execution_time = asyncio.get_event_loop().time() - start_time
 
-        results.append({
-            "endpoint": "POST /api/v1/assessment/start",
-            "description": extract_docstring(assessment.start_assessment),
-            "input": format_json(request.model_dump()),
-            "output": format_json({
-                "test_questions_count": len(result.test_questions),
+        session_id = result.session_id
+        test_result = EndpointTestResult(
+            endpoint="POST /api/v1/assessment/start",
+            method="POST",
+            description=extract_docstring(assessment.start_assessment),
+            input_data=request.model_dump(),
+            output_data={
                 "session_id": result.session_id,
+                "test_questions_count": len(result.test_questions),
                 "first_question": result.test_questions[0].model_dump()
                 if result.test_questions
                 else None,
-            }),
-            "status": "success",
-        })
-    except Exception as e:
-        session_id = "test_session_id"
-        results.append({
-            "endpoint": "POST /api/v1/assessment/start",
-            "description": extract_docstring(assessment.start_assessment),
-            "input": format_json({"user_id": "test_user_123"}),
-            "output": f"Error: {e!s}",
-            "status": "error",
-        })
-
-    # POST /api/v1/assessment/submit
-    try:
-        submit_request = AssessmentSubmitRequest(
-            session_id=session_id,
-            answers=[
-                {"question_id": 1, "answer": 1},
-                {"question_id": 2, "answer": 2},
-                {"question_id": 3, "answer": 1},
-            ],
+            },
+            status="success",
+            execution_time=execution_time,
         )
-        result = await assessment.submit_assessment(submit_request)
-
-        results.append({
-            "endpoint": "POST /api/v1/assessment/submit",
-            "description": extract_docstring(assessment.submit_assessment),
-            "input": format_json(submit_request.model_dump()),
-            "output": format_json(result.model_dump()),
-            "status": "success",
-        })
+        logger.info(
+            f"✓ Успешно. Session ID: {session_id}. Вопросов: {len(result.test_questions)}. Время: {execution_time:.3f}s"
+        )
+        results.append(test_result)
     except Exception as e:
-        results.append({
-            "endpoint": "POST /api/v1/assessment/submit",
-            "description": extract_docstring(assessment.submit_assessment),
-            "input": format_json({"session_id": session_id, "answers": []}),
-            "output": f"Error: {e!s}",
-            "status": "error",
-        })
+        execution_time = asyncio.get_event_loop().time() - start_time
+        session_id = "test_session_id"
+        test_result = EndpointTestResult(
+            endpoint="POST /api/v1/assessment/start",
+            method="POST",
+            description=extract_docstring(assessment.start_assessment),
+            input_data={"user_id": test_user_id},
+            output_data={},
+            status="error",
+            error_message=str(e),
+            execution_time=execution_time,
+        )
+        logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+        results.append(test_result)
+
+    # POST /api/v1/assessment/submit (только если создана сессия)
+    if session_id and results[-1].status == "success":
+        logger.info(f"Тест: POST /api/v1/assessment/submit для сессии {session_id}")
+        start_time = asyncio.get_event_loop().time()
+        try:
+            submit_request = AssessmentSubmitRequest(
+                session_id=session_id,
+                answers=[
+                    {"question_id": 1, "answer": 1},
+                    {"question_id": 2, "answer": 2},
+                    {"question_id": 3, "answer": 1},
+                ],
+            )
+            result = await assessment.submit_assessment(submit_request)
+            execution_time = asyncio.get_event_loop().time() - start_time
+
+            test_result = EndpointTestResult(
+                endpoint="POST /api/v1/assessment/submit",
+                method="POST",
+                description=extract_docstring(assessment.submit_assessment),
+                input_data=submit_request.model_dump(),
+                output_data=result.model_dump(),
+                status="success",
+                execution_time=execution_time,
+            )
+            logger.info(f"✓ Успешно. Уровень: {result.level}. Время: {execution_time:.3f}s")
+            results.append(test_result)
+        except Exception as e:
+            execution_time = asyncio.get_event_loop().time() - start_time
+            test_result = EndpointTestResult(
+                endpoint="POST /api/v1/assessment/submit",
+                method="POST",
+                description=extract_docstring(assessment.submit_assessment),
+                input_data={"session_id": session_id, "answers": []},
+                output_data={},
+                status="error",
+                error_message=str(e),
+                execution_time=execution_time,
+            )
+            logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+            results.append(test_result)
+    else:
+        logger.warning("⚠ Пропуск submit теста - нет валидной сессии")
 
     # GET /api/v1/assessment/results/{user_id}
+    logger.info(f"Тест: GET /api/v1/assessment/results/{test_user_id}")
+    start_time = asyncio.get_event_loop().time()
     try:
-        result = await assessment.get_assessment_results("test_user_123")
+        result = await assessment.get_assessment_results(test_user_id)
+        execution_time = asyncio.get_event_loop().time() - start_time
 
-        results.append({
-            "endpoint": "GET /api/v1/assessment/results/{user_id}",
-            "description": extract_docstring(assessment.get_assessment_results),
-            "input": format_json({"user_id": "test_user_123"}),
-            "output": format_json(result.model_dump()),
-            "status": "success",
-        })
+        test_result = EndpointTestResult(
+            endpoint="GET /api/v1/assessment/results/{user_id}",
+            method="GET",
+            description=extract_docstring(assessment.get_assessment_results),
+            input_data={"user_id": test_user_id},
+            output_data=result.model_dump(),
+            status="success",
+            execution_time=execution_time,
+        )
+        logger.info(f"✓ Успешно. Результаты получены. Время: {execution_time:.3f}s")
+        results.append(test_result)
     except Exception as e:
-        results.append({
-            "endpoint": "GET /api/v1/assessment/results/{user_id}",
-            "description": extract_docstring(assessment.get_assessment_results),
-            "input": format_json({"user_id": "test_user_123"}),
-            "output": f"Error: {e!s}",
-            "status": "error",
-        })
+        execution_time = asyncio.get_event_loop().time() - start_time
+        test_result = EndpointTestResult(
+            endpoint="GET /api/v1/assessment/results/{user_id}",
+            method="GET",
+            description=extract_docstring(assessment.get_assessment_results),
+            input_data={"user_id": test_user_id},
+            output_data={},
+            status="error",
+            error_message=str(e),
+            execution_time=execution_time,
+        )
+        logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+        results.append(test_result)
 
+    logger.info("")
     return results
 
 
-async def test_materials_endpoints():
-    """Тестирование materials endpoints"""
-    from src.models.schemas import (
-        AddCustomTopicRequest,
-        AskQuestionRequest,
-        GenerateMaterialRequest,
-        GetMaterialsRequest,
-        SearchMaterialsRequest,
-    )
+async def test_materials_endpoints() -> list[EndpointTestResult]:
+    """Тестирование materials эндпоинтов."""
+    logger.info("=" * 80)
+    logger.info("ТЕСТИРОВАНИЕ: Materials Endpoints")
+    logger.info("=" * 80)
 
-    results = []
+    results: list[EndpointTestResult] = []
+    generated_topic_id = None
+
+    # GET /api/v1/materials/topics
+    logger.info("Тест: GET /api/v1/materials/topics")
+    start_time = asyncio.get_event_loop().time()
+    try:
+        result = await materials.get_topics()
+        execution_time = asyncio.get_event_loop().time() - start_time
+
+        test_result = EndpointTestResult(
+            endpoint="GET /api/v1/materials/topics",
+            method="GET",
+            description=extract_docstring(materials.get_topics),
+            input_data={},
+            output_data={
+                "predefined_topics_count": len(result.predefined_topics),
+                "custom_topics_count": len(result.custom_topics),
+                "predefined_topics_preview": result.predefined_topics[:3],
+            },
+            status="success",
+            execution_time=execution_time,
+        )
+        logger.info(
+            f"✓ Успешно. Предопределенных тем: {len(result.predefined_topics)}, Пользовательских: {len(result.custom_topics)}. Время: {execution_time:.3f}s"
+        )
+        results.append(test_result)
+    except Exception as e:
+        execution_time = asyncio.get_event_loop().time() - start_time
+        test_result = EndpointTestResult(
+            endpoint="GET /api/v1/materials/topics",
+            method="GET",
+            description=extract_docstring(materials.get_topics),
+            input_data={},
+            output_data={},
+            status="error",
+            error_message=str(e),
+            execution_time=execution_time,
+        )
+        logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+        results.append(test_result)
+
+    # POST /api/v1/materials/add-custom-topic
+    logger.info("Тест: POST /api/v1/materials/add-custom-topic")
+    start_time = asyncio.get_event_loop().time()
+    try:
+        request = AddCustomTopicRequest(
+            topic_name="Алгоритмы поиска в графах",
+            content="Изучение алгоритмов BFS, DFS и Dijkstra",
+            user_id=f"test_user_{uuid.uuid4().hex[:8]}",
+        )
+        result = await materials.add_custom_topic(request)
+        execution_time = asyncio.get_event_loop().time() - start_time
+
+        generated_topic_id = result.topic_id
+        test_result = EndpointTestResult(
+            endpoint="POST /api/v1/materials/add-custom-topic",
+            method="POST",
+            description=extract_docstring(materials.add_custom_topic),
+            input_data=request.model_dump(),
+            output_data=result.model_dump(),
+            status="success",
+            execution_time=execution_time,
+        )
+        logger.info(f"✓ Успешно. Topic ID: {generated_topic_id}. Время: {execution_time:.3f}s")
+        results.append(test_result)
+    except Exception as e:
+        execution_time = asyncio.get_event_loop().time() - start_time
+        test_result = EndpointTestResult(
+            endpoint="POST /api/v1/materials/add-custom-topic",
+            method="POST",
+            description=extract_docstring(materials.add_custom_topic),
+            input_data={"topic_name": "Алгоритмы поиска в графах"},
+            output_data={},
+            status="error",
+            error_message=str(e),
+            execution_time=execution_time,
+        )
+        logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+        results.append(test_result)
 
     # POST /api/v1/materials/get-materials
+    logger.info("Тест: POST /api/v1/materials/get-materials")
+    start_time = asyncio.get_event_loop().time()
     try:
         request = GetMaterialsRequest(
-            topic="Сортировка пузырьком", user_level="beginner", language="ru"
+            topic="Сортировка массивов", user_level="beginner", language="ru"
         )
         result = await materials.get_materials(request)
+        execution_time = asyncio.get_event_loop().time() - start_time
 
-        results.append({
-            "endpoint": "POST /api/v1/materials/get-materials",
-            "description": extract_docstring(materials.get_materials),
-            "input": format_json(request.model_dump()),
-            "output": format_json({
+        test_result = EndpointTestResult(
+            endpoint="POST /api/v1/materials/get-materials",
+            method="POST",
+            description=extract_docstring(materials.get_materials),
+            input_data=request.model_dump(),
+            output_data={
                 "content_preview": result.content[:200] + "..."
                 if len(result.content) > 200
                 else result.content,
                 "sources": result.sources,
                 "adapted_for_level": result.adapted_for_level,
-            }),
-            "status": "success",
-        })
-    except Exception as e:
-        results.append({
-            "endpoint": "POST /api/v1/materials/get-materials",
-            "description": extract_docstring(materials.get_materials),
-            "input": format_json({"topic": "Сортировка пузырьком", "user_level": "beginner"}),
-            "output": f"Error: {e!s}",
-            "status": "error",
-        })
-
-    # POST /api/v1/materials/ask-question
-    try:
-        request = AskQuestionRequest(
-            question="Какова временная сложность пузырьковой сортировки?",
-            context_topic="Сортировки",
-            user_level="beginner",
-            language="ru",
+            },
+            status="success",
+            execution_time=execution_time,
         )
-        result = await materials.ask_question(request)
-
-        results.append({
-            "endpoint": "POST /api/v1/materials/ask-question",
-            "description": extract_docstring(materials.ask_question),
-            "input": format_json(request.model_dump()),
-            "output": format_json({
-                "answer_preview": result.answer[:200] + "..."
-                if len(result.answer) > 200
-                else result.answer,
-                "related_concepts": result.related_concepts,
-            }),
-            "status": "success",
-        })
+        logger.info(
+            f"✓ Успешно. Контент: {len(result.content)} символов. Время: {execution_time:.3f}s"
+        )
+        results.append(test_result)
     except Exception as e:
-        results.append({
-            "endpoint": "POST /api/v1/materials/ask-question",
-            "description": extract_docstring(materials.ask_question),
-            "input": format_json({"question": "Тестовый вопрос", "context_topic": "Тест"}),
-            "output": f"Error: {e!s}",
-            "status": "error",
-        })
+        execution_time = asyncio.get_event_loop().time() - start_time
+        test_result = EndpointTestResult(
+            endpoint="POST /api/v1/materials/get-materials",
+            method="POST",
+            description=extract_docstring(materials.get_materials),
+            input_data={"topic": "Сортировка массивов", "user_level": "beginner"},
+            output_data={},
+            status="error",
+            error_message=str(e),
+            execution_time=execution_time,
+        )
+        logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+        results.append(test_result)
 
     # POST /api/v1/materials/generate-material
+    logger.info("Тест: POST /api/v1/materials/generate-material")
+    start_time = asyncio.get_event_loop().time()
     try:
         request = GenerateMaterialRequest(
             topic="Бинарный поиск", format="summary", length="short", language="ru"
         )
         result = await materials.generate_material(request)
+        execution_time = asyncio.get_event_loop().time() - start_time
 
-        results.append({
-            "endpoint": "POST /api/v1/materials/generate-material",
-            "description": extract_docstring(materials.generate_material),
-            "input": format_json(request.model_dump()),
-            "output": format_json({
+        generated_topic_id = result.topic_id
+        test_result = EndpointTestResult(
+            endpoint="POST /api/v1/materials/generate-material",
+            method="POST",
+            description=extract_docstring(materials.generate_material),
+            input_data=request.model_dump(),
+            output_data={
                 "material_preview": result.material[:200] + "..."
                 if len(result.material) > 200
                 else result.material,
@@ -233,497 +430,729 @@ async def test_materials_endpoints():
                 "word_count": result.word_count,
                 "model_used": result.model_used,
                 "topic_id": result.topic_id,
-            }),
-            "status": "success",
-        })
-    except Exception as e:
-        results.append({
-            "endpoint": "POST /api/v1/materials/generate-material",
-            "description": extract_docstring(materials.generate_material),
-            "input": format_json({"topic": "Бинарный поиск", "format": "summary"}),
-            "output": f"Error: {e!s}",
-            "status": "error",
-        })
-
-    # POST /api/v1/materials/add-custom-topic
-    try:
-        request = AddCustomTopicRequest(
-            topic_name="Моя кастомная тема",
-            user_id="test_user_123",
-            content="Тестовое содержание темы",
+            },
+            status="success",
+            execution_time=execution_time,
         )
-        result = await materials.add_custom_topic(request)
-
-        results.append({
-            "endpoint": "POST /api/v1/materials/add-custom-topic",
-            "description": extract_docstring(materials.add_custom_topic),
-            "input": format_json(request.model_dump()),
-            "output": format_json(result.model_dump()),
-            "status": "success",
-        })
+        logger.info(
+            f"✓ Успешно. Материал сгенерирован. Topic ID: {generated_topic_id}. Время: {execution_time:.3f}s"
+        )
+        results.append(test_result)
     except Exception as e:
-        results.append({
-            "endpoint": "POST /api/v1/materials/add-custom-topic",
-            "description": extract_docstring(materials.add_custom_topic),
-            "input": format_json({"topic_name": "Тест", "user_id": "test_user"}),
-            "output": f"Error: {e!s}",
-            "status": "error",
-        })
+        execution_time = asyncio.get_event_loop().time() - start_time
+        test_result = EndpointTestResult(
+            endpoint="POST /api/v1/materials/generate-material",
+            method="POST",
+            description=extract_docstring(materials.generate_material),
+            input_data={"topic": "Бинарный поиск", "format": "summary"},
+            output_data={},
+            status="error",
+            error_message=str(e),
+            execution_time=execution_time,
+        )
+        logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+        results.append(test_result)
 
-    # GET /api/v1/materials/topics
-    try:
-        result = await materials.get_topics()
+    # POST /api/v1/materials/ask-question (только если материал был сгенерирован)
+    if generated_topic_id and results[-1].status == "success":
+        logger.info(f"Тест: POST /api/v1/materials/ask-question для темы {generated_topic_id}")
+        start_time = asyncio.get_event_loop().time()
+        try:
+            request = AskQuestionRequest(
+                question="Какова временная сложность бинарного поиска?",
+                context_topic="Бинарный поиск",
+                user_level="beginner",
+                language="ru",
+            )
+            result = await materials.ask_question(request)
+            execution_time = asyncio.get_event_loop().time() - start_time
 
-        results.append({
-            "endpoint": "GET /api/v1/materials/topics",
-            "description": extract_docstring(materials.get_topics),
-            "input": "Без параметров",
-            "output": format_json({
-                "predefined_topics_count": len(result.predefined_topics),
-                "custom_topics_count": len(result.custom_topics),
-                "predefined_topics_preview": result.predefined_topics[:3],
-            }),
-            "status": "success",
-        })
-    except Exception as e:
-        results.append({
-            "endpoint": "GET /api/v1/materials/topics",
-            "description": extract_docstring(materials.get_topics),
-            "input": "Без параметров",
-            "output": f"Error: {e!s}",
-            "status": "error",
-        })
+            test_result = EndpointTestResult(
+                endpoint="POST /api/v1/materials/ask-question",
+                method="POST",
+                description=extract_docstring(materials.ask_question),
+                input_data=request.model_dump(),
+                output_data={"answer": result.answer, "related_concepts": result.related_concepts},
+                status="success",
+                execution_time=execution_time,
+            )
+            logger.info(f"✓ Успешно. Ответ получен. Время: {execution_time:.3f}s")
+            results.append(test_result)
+        except Exception as e:
+            execution_time = asyncio.get_event_loop().time() - start_time
+            test_result = EndpointTestResult(
+                endpoint="POST /api/v1/materials/ask-question",
+                method="POST",
+                description=extract_docstring(materials.ask_question),
+                input_data={"question": "Какова временная сложность?"},
+                output_data={},
+                status="error",
+                error_message=str(e),
+                execution_time=execution_time,
+            )
+            logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+            results.append(test_result)
+    else:
+        logger.warning("⚠ Пропуск ask-question теста - нет сгенерированного материала")
 
     # POST /api/v1/materials/search
+    logger.info("Тест: POST /api/v1/materials/search")
+    start_time = asyncio.get_event_loop().time()
     try:
         request = SearchMaterialsRequest(
-            query="алгоритм сортировки", filters={"level": "beginner"}
+            query="алгоритмы сортировки", filters={"level": "beginner"}
         )
         result = await materials.search_materials(request)
+        execution_time = asyncio.get_event_loop().time() - start_time
 
-        results.append({
-            "endpoint": "POST /api/v1/materials/search",
-            "description": extract_docstring(materials.search_materials),
-            "input": format_json(request.model_dump()),
-            "output": format_json({
+        test_result = EndpointTestResult(
+            endpoint="POST /api/v1/materials/search",
+            method="POST",
+            description=extract_docstring(materials.search_materials),
+            input_data=request.model_dump(),
+            output_data={
                 "results_count": len(result.results),
                 "relevance_scores": result.relevance_scores[:5],
-            }),
-            "status": "success",
-        })
+            },
+            status="success",
+            execution_time=execution_time,
+        )
+        logger.info(
+            f"✓ Успешно. Найдено результатов: {len(result.results)}. Время: {execution_time:.3f}s"
+        )
+        results.append(test_result)
     except Exception as e:
-        results.append({
-            "endpoint": "POST /api/v1/materials/search",
-            "description": extract_docstring(materials.search_materials),
-            "input": format_json({"query": "тест"}),
-            "output": f"Error: {e!s}",
-            "status": "error",
-        })
+        execution_time = asyncio.get_event_loop().time() - start_time
+        test_result = EndpointTestResult(
+            endpoint="POST /api/v1/materials/search",
+            method="POST",
+            description=extract_docstring(materials.search_materials),
+            input_data={"query": "алгоритмы сортировки"},
+            output_data={},
+            status="error",
+            error_message=str(e),
+            execution_time=execution_time,
+        )
+        logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+        results.append(test_result)
 
+    logger.info("")
     return results
 
 
-async def test_tests_endpoints():
-    """Тестирование tests endpoints"""
-    from src.models.schemas import GenerateTaskRequest, GenerateTestRequest, SubmitTestRequest
+async def test_tests_endpoints() -> list[EndpointTestResult]:
+    """Тестирование tests эндпоинтов."""
+    logger.info("=" * 80)
+    logger.info("ТЕСТИРОВАНИЕ: Tests Endpoints")
+    logger.info("=" * 80)
 
-    results = []
+    results: list[EndpointTestResult] = []
+    test_id = None
+    test_user_id = f"test_user_{uuid.uuid4().hex[:8]}"
 
     # POST /api/v1/tests/generate
+    logger.info("Тест: POST /api/v1/tests/generate")
+    start_time = asyncio.get_event_loop().time()
     try:
         request = GenerateTestRequest(
-            topic="Структуры данных", difficulty="easy", question_count=3, language="ru"
+            topic="Сортировка пузырьком", difficulty="easy", question_count=3, language="ru"
         )
         result = await tests.generate_test(request)
-        test_id = result.test_id
+        execution_time = asyncio.get_event_loop().time() - start_time
 
-        results.append({
-            "endpoint": "POST /api/v1/tests/generate",
-            "description": extract_docstring(tests.generate_test),
-            "input": format_json(request.model_dump()),
-            "output": format_json({
+        test_id = result.test_id
+        test_result = EndpointTestResult(
+            endpoint="POST /api/v1/tests/generate",
+            method="POST",
+            description=extract_docstring(tests.generate_test),
+            input_data=request.model_dump(),
+            output_data={
                 "test_id": result.test_id,
                 "questions_count": len(result.questions),
                 "expected_duration": result.expected_duration,
-            }),
-            "status": "success",
-        })
+                "first_question": result.questions[0].model_dump() if result.questions else None,
+            },
+            status="success",
+            execution_time=execution_time,
+        )
+        logger.info(
+            f"✓ Успешно. Test ID: {test_id}. Вопросов: {len(result.questions)}. Время: {execution_time:.3f}s"
+        )
+        results.append(test_result)
     except Exception as e:
-        test_id = "test_test_id"
-        results.append({
-            "endpoint": "POST /api/v1/tests/generate",
-            "description": extract_docstring(tests.generate_test),
-            "input": format_json({"topic": "Структуры данных", "difficulty": "easy"}),
-            "output": f"Error: {e!s}",
-            "status": "error",
-        })
+        execution_time = asyncio.get_event_loop().time() - start_time
+        test_id = str(uuid.uuid4())
+        test_result = EndpointTestResult(
+            endpoint="POST /api/v1/tests/generate",
+            method="POST",
+            description=extract_docstring(tests.generate_test),
+            input_data={"topic": "Сортировка пузырьком", "difficulty": "easy"},
+            output_data={},
+            status="error",
+            error_message=str(e),
+            execution_time=execution_time,
+        )
+        logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+        results.append(test_result)
 
     # POST /api/v1/tests/generate-task
+    logger.info("Тест: POST /api/v1/tests/generate-task")
+    start_time = asyncio.get_event_loop().time()
     try:
         request = GenerateTaskRequest(
-            topic="Алгоритмы поиска", difficulty="medium", task_type="coding", language="ru"
+            topic="Рекурсия", difficulty="medium", task_type="coding", language="ru"
         )
         result = await tests.generate_task(request)
+        execution_time = asyncio.get_event_loop().time() - start_time
 
-        results.append({
-            "endpoint": "POST /api/v1/tests/generate-task",
-            "description": extract_docstring(tests.generate_task),
-            "input": format_json(request.model_dump()),
-            "output": format_json({
+        test_result = EndpointTestResult(
+            endpoint="POST /api/v1/tests/generate-task",
+            method="POST",
+            description=extract_docstring(tests.generate_task),
+            input_data=request.model_dump(),
+            output_data={
                 "task_id": result.task.task_id,
                 "description_preview": result.task.description[:100] + "..."
                 if len(result.task.description) > 100
                 else result.task.description,
                 "hints_count": len(result.solution_hints),
                 "model_used": result.model_used,
-            }),
-            "status": "success",
-        })
-    except Exception as e:
-        results.append({
-            "endpoint": "POST /api/v1/tests/generate-task",
-            "description": extract_docstring(tests.generate_task),
-            "input": format_json({"topic": "Алгоритмы", "difficulty": "medium"}),
-            "output": f"Error: {e!s}",
-            "status": "error",
-        })
-
-    # POST /api/v1/tests/submit-for-verification
-    try:
-        request = SubmitTestRequest(
-            test_id=test_id,
-            user_id="test_user_123",
-            answers=[{"question_id": 1, "answer": "Test answer"}],
+            },
+            status="success",
+            execution_time=execution_time,
         )
-        result = await tests.submit_test_for_verification(request)
-
-        results.append({
-            "endpoint": "POST /api/v1/tests/submit-for-verification",
-            "description": extract_docstring(tests.submit_test_for_verification),
-            "input": format_json(request.model_dump()),
-            "output": format_json(result.model_dump()),
-            "status": "success",
-        })
+        logger.info(
+            f"✓ Успешно. Task ID: {result.task.task_id}. Подсказок: {len(result.solution_hints)}. Время: {execution_time:.3f}s"
+        )
+        results.append(test_result)
     except Exception as e:
-        results.append({
-            "endpoint": "POST /api/v1/tests/submit-for-verification",
-            "description": extract_docstring(tests.submit_test_for_verification),
-            "input": format_json({"test_id": "test", "user_id": "test"}),
-            "output": f"Error: {e!s}",
-            "status": "error",
-        })
+        execution_time = asyncio.get_event_loop().time() - start_time
+        test_result = EndpointTestResult(
+            endpoint="POST /api/v1/tests/generate-task",
+            method="POST",
+            description=extract_docstring(tests.generate_task),
+            input_data={"topic": "Рекурсия", "difficulty": "medium"},
+            output_data={},
+            status="error",
+            error_message=str(e),
+            execution_time=execution_time,
+        )
+        logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+        results.append(test_result)
 
-    # GET /api/v1/tests/{test_id}
-    try:
-        result = await tests.get_test(test_id)
+    # GET /api/v1/tests/{test_id} (только если тест был создан)
+    if test_id and results[0].status == "success":
+        logger.info(f"Тест: GET /api/v1/tests/{test_id}")
+        start_time = asyncio.get_event_loop().time()
+        try:
+            result = await tests.get_test(test_id)
+            execution_time = asyncio.get_event_loop().time() - start_time
 
-        results.append({
-            "endpoint": f"GET /api/v1/tests/{test_id}",
-            "description": extract_docstring(tests.get_test),
-            "input": format_json({"test_id": test_id}),
-            "output": format_json({
-                "test_id": result.test.get("test_id"),
-                "topic": result.test.get("topic"),
-                "difficulty": result.test.get("difficulty"),
-            }),
-            "status": "success",
-        })
-    except Exception as e:
-        results.append({
-            "endpoint": f"GET /api/v1/tests/{test_id}",
-            "description": extract_docstring(tests.get_test),
-            "input": format_json({"test_id": test_id}),
-            "output": f"Error: {e!s}",
-            "status": "error",
-        })
+            test_result = EndpointTestResult(
+                endpoint=f"GET /api/v1/tests/{test_id}",
+                method="GET",
+                description=extract_docstring(tests.get_test),
+                input_data={"test_id": test_id},
+                output_data={
+                    "test_id": result.test["test_id"],
+                    "topic": result.test["topic"],
+                    "difficulty": result.test["difficulty"],
+                },
+                status="success",
+                execution_time=execution_time,
+            )
+            logger.info(f"✓ Успешно. Тест получен. Время: {execution_time:.3f}s")
+            results.append(test_result)
+        except Exception as e:
+            execution_time = asyncio.get_event_loop().time() - start_time
+            test_result = EndpointTestResult(
+                endpoint=f"GET /api/v1/tests/{test_id}",
+                method="GET",
+                description=extract_docstring(tests.get_test),
+                input_data={"test_id": test_id},
+                output_data={},
+                status="error",
+                error_message=str(e),
+                execution_time=execution_time,
+            )
+            logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+            results.append(test_result)
+
+        # POST /api/v1/tests/submit-for-verification (только если тест получен)
+        if results[-1].status == "success":
+            logger.info(f"Тест: POST /api/v1/tests/submit-for-verification для теста {test_id}")
+            start_time = asyncio.get_event_loop().time()
+            try:
+                request = SubmitTestRequest(
+                    test_id=test_id,
+                    user_id=test_user_id,
+                    answers=[{"question_id": 1, "answer": "Тестовый ответ"}],
+                )
+                result = await tests.submit_test_for_verification(request)
+                execution_time = asyncio.get_event_loop().time() - start_time
+
+                test_result = EndpointTestResult(
+                    endpoint="POST /api/v1/tests/submit-for-verification",
+                    method="POST",
+                    description=extract_docstring(tests.submit_test_for_verification),
+                    input_data=request.model_dump(),
+                    output_data=result.model_dump(),
+                    status="success",
+                    execution_time=execution_time,
+                )
+                logger.info(
+                    f"✓ Успешно. Verification ID: {result.verification_id}. Время: {execution_time:.3f}s"
+                )
+                results.append(test_result)
+            except Exception as e:
+                execution_time = asyncio.get_event_loop().time() - start_time
+                test_result = EndpointTestResult(
+                    endpoint="POST /api/v1/tests/submit-for-verification",
+                    method="POST",
+                    description=extract_docstring(tests.submit_test_for_verification),
+                    input_data={"test_id": test_id, "user_id": test_user_id},
+                    output_data={},
+                    status="error",
+                    error_message=str(e),
+                    execution_time=execution_time,
+                )
+                logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+                results.append(test_result)
+        else:
+            logger.warning("⚠ Пропуск submit-for-verification теста - тест не был получен")
+    else:
+        logger.warning("⚠ Пропуск GET test и submit-for-verification тестов - тест не был создан")
 
     # GET /api/v1/tests/user/{user_id}/completed
+    logger.info(f"Тест: GET /api/v1/tests/user/{test_user_id}/completed")
+    start_time = asyncio.get_event_loop().time()
     try:
-        result = await tests.get_completed_tests("test_user_123")
+        result = await tests.get_completed_tests(test_user_id)
+        execution_time = asyncio.get_event_loop().time() - start_time
 
-        results.append({
-            "endpoint": "GET /api/v1/tests/user/{user_id}/completed",
-            "description": extract_docstring(tests.get_completed_tests),
-            "input": format_json({"user_id": "test_user_123"}),
-            "output": format_json({
+        test_result = EndpointTestResult(
+            endpoint="GET /api/v1/tests/user/{user_id}/completed",
+            method="GET",
+            description=extract_docstring(tests.get_completed_tests),
+            input_data={"user_id": test_user_id},
+            output_data={
                 "completed_tests_count": len(result.completed_tests),
                 "statistics": result.statistics,
-            }),
-            "status": "success",
-        })
+            },
+            status="success",
+            execution_time=execution_time,
+        )
+        logger.info(
+            f"✓ Успешно. Завершенных тестов: {len(result.completed_tests)}. Время: {execution_time:.3f}s"
+        )
+        results.append(test_result)
     except Exception as e:
-        results.append({
-            "endpoint": "GET /api/v1/tests/user/{user_id}/completed",
-            "description": extract_docstring(tests.get_completed_tests),
-            "input": format_json({"user_id": "test_user_123"}),
-            "output": f"Error: {e!s}",
-            "status": "error",
-        })
+        execution_time = asyncio.get_event_loop().time() - start_time
+        test_result = EndpointTestResult(
+            endpoint="GET /api/v1/tests/user/{user_id}/completed",
+            method="GET",
+            description=extract_docstring(tests.get_completed_tests),
+            input_data={"user_id": test_user_id},
+            output_data={},
+            status="error",
+            error_message=str(e),
+            execution_time=execution_time,
+        )
+        logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+        results.append(test_result)
 
+    logger.info("")
     return results
 
 
-async def test_verification_endpoints():
-    """Тестирование verification endpoints"""
-    from src.models.schemas import TestVerificationRequest
+async def test_verification_endpoints() -> list[EndpointTestResult]:
+    """Тестирование verification эндпоинтов."""
+    logger.info("=" * 80)
+    logger.info("ТЕСТИРОВАНИЕ: Verification Endpoints")
+    logger.info("=" * 80)
 
-    results = []
+    results: list[EndpointTestResult] = []
+    test_user_id = f"test_user_{uuid.uuid4().hex[:8]}"
 
     # POST /api/v1/verification/check-test
+    logger.info("Тест: POST /api/v1/verification/check-test")
+    start_time = asyncio.get_event_loop().time()
     try:
         request = TestVerificationRequest(
-            test_id="test_test_id",
-            user_answer="Пузырьковая сортировка имеет сложность O(n²)",
+            test_id=str(uuid.uuid4()),
+            user_answer="В среднем случае это O(n log n)",
             language="ru",
-            question="Какова временная сложность пузырьковой сортировки?",
-            expected_answer="O(n²)",
+            question="Какова временная сложность алгоритма быстрой сортировки в среднем случае?",
+            expected_answer="O(n log n)",
         )
         result = await verification.check_test(request)
+        execution_time = asyncio.get_event_loop().time() - start_time
 
-        results.append({
-            "endpoint": "POST /api/v1/verification/check-test",
-            "description": extract_docstring(verification.check_test),
-            "input": format_json(request.model_dump()),
-            "output": format_json({
-                "is_correct": result.is_correct,
-                "score": result.score,
-                "feedback_preview": result.feedback[:150] + "..."
-                if len(result.feedback) > 150
-                else result.feedback,
-                "verification_details": result.verification_details,
-            }),
-            "status": "success",
-        })
+        test_result = EndpointTestResult(
+            endpoint="POST /api/v1/verification/check-test",
+            method="POST",
+            description=extract_docstring(verification.check_test),
+            input_data=request.model_dump(),
+            output_data=result.model_dump(),
+            status="success",
+            execution_time=execution_time,
+        )
+        logger.info(
+            f"✓ Успешно. Оценка: {result.score}. Правильно: {result.is_correct}. Время: {execution_time:.3f}s"
+        )
+        results.append(test_result)
     except Exception as e:
-        results.append({
-            "endpoint": "POST /api/v1/verification/check-test",
-            "description": extract_docstring(verification.check_test),
-            "input": format_json({"test_id": "test", "user_answer": "test"}),
-            "output": f"Error: {e!s}",
-            "status": "error",
-        })
+        execution_time = asyncio.get_event_loop().time() - start_time
+        test_result = EndpointTestResult(
+            endpoint="POST /api/v1/verification/check-test",
+            method="POST",
+            description=extract_docstring(verification.check_test),
+            input_data={"question": "test", "user_answer": "test"},
+            output_data={},
+            status="error",
+            error_message=str(e),
+            execution_time=execution_time,
+        )
+        logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+        results.append(test_result)
 
     # GET /api/v1/verification/history/{user_id}
+    logger.info(f"Тест: GET /api/v1/verification/history/{test_user_id}")
+    start_time = asyncio.get_event_loop().time()
     try:
-        result = await verification.get_verification_history("test_user_123")
+        result = await verification.get_verification_history(test_user_id)
+        execution_time = asyncio.get_event_loop().time() - start_time
 
-        results.append({
-            "endpoint": "GET /api/v1/verification/history/{user_id}",
-            "description": extract_docstring(verification.get_verification_history),
-            "input": format_json({"user_id": "test_user_123"}),
-            "output": format_json({
+        test_result = EndpointTestResult(
+            endpoint="GET /api/v1/verification/history/{user_id}",
+            method="GET",
+            description=extract_docstring(verification.get_verification_history),
+            input_data={"user_id": test_user_id},
+            output_data={
                 "tests_count": len(result.tests),
                 "average_score": result.average_score,
                 "total_tests": result.total_tests,
-            }),
-            "status": "success",
-        })
+            },
+            status="success",
+            execution_time=execution_time,
+        )
+        logger.info(
+            f"✓ Успешно. Проверок: {len(result.tests)}. Средний балл: {result.average_score:.2f}. Время: {execution_time:.3f}s"
+        )
+        results.append(test_result)
     except Exception as e:
-        results.append({
-            "endpoint": "GET /api/v1/verification/history/{user_id}",
-            "description": extract_docstring(verification.get_verification_history),
-            "input": format_json({"user_id": "test_user_123"}),
-            "output": f"Error: {e!s}",
-            "status": "error",
-        })
+        execution_time = asyncio.get_event_loop().time() - start_time
+        test_result = EndpointTestResult(
+            endpoint="GET /api/v1/verification/history/{user_id}",
+            method="GET",
+            description=extract_docstring(verification.get_verification_history),
+            input_data={"user_id": test_user_id},
+            output_data={},
+            status="error",
+            error_message=str(e),
+            execution_time=execution_time,
+        )
+        logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+        results.append(test_result)
 
+    logger.info("")
     return results
 
 
-async def test_llm_router_endpoints():
-    """Тестирование LLM router endpoints"""
-    from src.models.schemas import LLMRouterRequest, RouteRequestRequest
+async def test_llm_router_endpoints() -> list[EndpointTestResult]:
+    """Тестирование LLM router эндпоинтов."""
+    logger.info("=" * 80)
+    logger.info("ТЕСТИРОВАНИЕ: LLM Router Endpoints")
+    logger.info("=" * 80)
 
-    results = []
+    results: list[EndpointTestResult] = []
+
+    # GET /api/v1/llm-router/available-models
+    logger.info("Тест: GET /api/v1/llm-router/available-models")
+    start_time = asyncio.get_event_loop().time()
+    try:
+        result = await llm_router.get_available_models()
+        execution_time = asyncio.get_event_loop().time() - start_time
+
+        test_result = EndpointTestResult(
+            endpoint="GET /api/v1/llm-router/available-models",
+            method="GET",
+            description=extract_docstring(llm_router.get_available_models),
+            input_data={},
+            output_data=result.model_dump(),
+            status="success",
+            execution_time=execution_time,
+        )
+        logger.info(
+            f"✓ Успешно. Доступно моделей: {len(result.models)}. Время: {execution_time:.3f}s"
+        )
+        results.append(test_result)
+    except Exception as e:
+        execution_time = asyncio.get_event_loop().time() - start_time
+        test_result = EndpointTestResult(
+            endpoint="GET /api/v1/llm-router/available-models",
+            method="GET",
+            description=extract_docstring(llm_router.get_available_models),
+            input_data={},
+            output_data={},
+            status="error",
+            error_message=str(e),
+            execution_time=execution_time,
+        )
+        logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+        results.append(test_result)
+
+    # POST /api/v1/llm-router/route-request
+    logger.info("Тест: POST /api/v1/llm-router/route-request")
+    start_time = asyncio.get_event_loop().time()
+    try:
+        request = RouteRequestRequest(
+            request_type="material", content="Объясни принцип работы хеш-таблиц", language="ru"
+        )
+        result = await llm_router.route_request(request)
+        execution_time = asyncio.get_event_loop().time() - start_time
+
+        test_result = EndpointTestResult(
+            endpoint="POST /api/v1/llm-router/route-request",
+            method="POST",
+            description=extract_docstring(llm_router.route_request),
+            input_data=request.model_dump(),
+            output_data=result.model_dump(),
+            status="success",
+            execution_time=execution_time,
+        )
+        logger.info(
+            f"✓ Успешно. Выбранная модель: {result.selected_model}. Время: {execution_time:.3f}s"
+        )
+        results.append(test_result)
+    except Exception as e:
+        execution_time = asyncio.get_event_loop().time() - start_time
+        test_result = EndpointTestResult(
+            endpoint="POST /api/v1/llm-router/route-request",
+            method="POST",
+            description=extract_docstring(llm_router.route_request),
+            input_data={"request_type": "material", "language": "ru"},
+            output_data={},
+            status="error",
+            error_message=str(e),
+            execution_time=execution_time,
+        )
+        logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+        results.append(test_result)
 
     # POST /api/v1/llm-router/select-and-generate
+    logger.info("Тест: POST /api/v1/llm-router/select-and-generate")
+    start_time = asyncio.get_event_loop().time()
     try:
         request = LLMRouterRequest(
             request_type="material",
-            content="Объясни быструю сортировку",
+            content="Что такое динамическое программирование?",
             language="ru",
-            parameters={},
         )
         result = await llm_router.select_and_generate(request)
+        execution_time = asyncio.get_event_loop().time() - start_time
 
-        results.append({
-            "endpoint": "POST /api/v1/llm-router/select-and-generate",
-            "description": extract_docstring(llm_router.select_and_generate),
-            "input": format_json(request.model_dump()),
-            "output": format_json({
-                "content_preview": result.generated_content[:200] + "..."
+        test_result = EndpointTestResult(
+            endpoint="POST /api/v1/llm-router/select-and-generate",
+            method="POST",
+            description=extract_docstring(llm_router.select_and_generate),
+            input_data=request.model_dump(),
+            output_data={
+                "generated_content_preview": result.generated_content[:200] + "..."
                 if len(result.generated_content) > 200
                 else result.generated_content,
                 "model_used": result.model_used,
-                "metadata": result.metadata,
-            }),
-            "status": "success",
-        })
-    except Exception as e:
-        results.append({
-            "endpoint": "POST /api/v1/llm-router/select-and-generate",
-            "description": extract_docstring(llm_router.select_and_generate),
-            "input": format_json({"request_type": "material", "content": "test"}),
-            "output": f"Error: {e!s}",
-            "status": "error",
-        })
-
-    # GET /api/v1/llm-router/available-models
-    try:
-        result = await llm_router.get_available_models()
-
-        results.append({
-            "endpoint": "GET /api/v1/llm-router/available-models",
-            "description": extract_docstring(llm_router.get_available_models),
-            "input": "Без параметров",
-            "output": format_json({
-                "models": [m.model_dump() for m in result.models],
-                "capabilities": result.capabilities,
-            }),
-            "status": "success",
-        })
-    except Exception as e:
-        results.append({
-            "endpoint": "GET /api/v1/llm-router/available-models",
-            "description": extract_docstring(llm_router.get_available_models),
-            "input": "Без параметров",
-            "output": f"Error: {e!s}",
-            "status": "error",
-        })
-
-    # POST /api/v1/llm-router/route-request
-    try:
-        request = RouteRequestRequest(
-            request_type="test",
-            content="Создай тест по алгоритмам",
-            context={"difficulty": "medium"},
-            language="ru",
+            },
+            status="success",
+            execution_time=execution_time,
         )
-        result = await llm_router.route_request(request)
-
-        results.append({
-            "endpoint": "POST /api/v1/llm-router/route-request",
-            "description": extract_docstring(llm_router.route_request),
-            "input": format_json(request.model_dump()),
-            "output": format_json(result.model_dump()),
-            "status": "success",
-        })
+        logger.info(
+            f"✓ Успешно. Контент сгенерирован. Модель: {result.model_used}. Время: {execution_time:.3f}s"
+        )
+        results.append(test_result)
     except Exception as e:
-        results.append({
-            "endpoint": "POST /api/v1/llm-router/route-request",
-            "description": extract_docstring(llm_router.route_request),
-            "input": format_json({"request_type": "test", "content": "test"}),
-            "output": f"Error: {e!s}",
-            "status": "error",
-        })
+        execution_time = asyncio.get_event_loop().time() - start_time
+        test_result = EndpointTestResult(
+            endpoint="POST /api/v1/llm-router/select-and-generate",
+            method="POST",
+            description=extract_docstring(llm_router.select_and_generate),
+            input_data={"request_type": "material", "content": "test"},
+            output_data={},
+            status="error",
+            error_message=str(e),
+            execution_time=execution_time,
+        )
+        logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+        results.append(test_result)
 
+    logger.info("")
     return results
 
 
-async def test_support_endpoints():
-    """Тестирование support endpoints"""
-    from src.models.schemas import SubmitFeedbackRequest, SupportRequest
+async def test_support_endpoints() -> list[EndpointTestResult]:
+    """Тестирование support эндпоинтов."""
+    logger.info("=" * 80)
+    logger.info("ТЕСТИРОВАНИЕ: Support Endpoints")
+    logger.info("=" * 80)
 
-    results = []
-
-    # POST /api/v1/support/get-support
-    try:
-        request = SupportRequest(
-            user_id="test_user_123",
-            message="Я чувствую себя перегруженным изучением алгоритмов",
-            emotional_state="stressed",
-            language="ru",
-        )
-        result = await support.get_support(request)
-
-        results.append({
-            "endpoint": "POST /api/v1/support/get-support",
-            "description": extract_docstring(support.get_support),
-            "input": format_json(request.model_dump()),
-            "output": format_json({
-                "support_message_preview": result.support_message[:200] + "..."
-                if len(result.support_message) > 200
-                else result.support_message,
-                "recommendations_count": len(result.recommendations),
-                "resources_count": len(result.resources),
-            }),
-            "status": "success",
-        })
-    except Exception as e:
-        results.append({
-            "endpoint": "POST /api/v1/support/get-support",
-            "description": extract_docstring(support.get_support),
-            "input": format_json({"user_id": "test", "message": "test"}),
-            "output": f"Error: {e!s}",
-            "status": "error",
-        })
+    results: list[EndpointTestResult] = []
+    session_id = None
 
     # GET /api/v1/support/resources
+    logger.info("Тест: GET /api/v1/support/resources")
+    start_time = asyncio.get_event_loop().time()
     try:
         result = await support.get_support_resources()
+        execution_time = asyncio.get_event_loop().time() - start_time
 
-        results.append({
-            "endpoint": "GET /api/v1/support/resources",
-            "description": extract_docstring(support.get_support_resources),
-            "input": "Без параметров",
-            "output": format_json({
+        test_result = EndpointTestResult(
+            endpoint="GET /api/v1/support/resources",
+            method="GET",
+            description=extract_docstring(support.get_support_resources),
+            input_data={},
+            output_data={
                 "articles_count": len(result.articles),
                 "exercises_count": len(result.exercises),
                 "tips_count": len(result.tips),
-            }),
-            "status": "success",
-        })
-    except Exception as e:
-        results.append({
-            "endpoint": "GET /api/v1/support/resources",
-            "description": extract_docstring(support.get_support_resources),
-            "input": "Без параметров",
-            "output": f"Error: {e!s}",
-            "status": "error",
-        })
-
-    # POST /api/v1/support/feedback
-    try:
-        request = SubmitFeedbackRequest(
-            session_id="test_session_id", helpful=True, comments="Очень помогло!"
+            },
+            status="success",
+            execution_time=execution_time,
         )
-        result = await support.submit_feedback(request)
-
-        results.append({
-            "endpoint": "POST /api/v1/support/feedback",
-            "description": extract_docstring(support.submit_feedback),
-            "input": format_json(request.model_dump()),
-            "output": format_json(result.model_dump()),
-            "status": "success",
-        })
+        logger.info(
+            f"✓ Успешно. Статей: {len(result.articles)}, Упражнений: {len(result.exercises)}. Время: {execution_time:.3f}s"
+        )
+        results.append(test_result)
     except Exception as e:
-        results.append({
-            "endpoint": "POST /api/v1/support/feedback",
-            "description": extract_docstring(support.submit_feedback),
-            "input": format_json({"session_id": "test", "helpful": True}),
-            "output": f"Error: {e!s}",
-            "status": "error",
-        })
+        execution_time = asyncio.get_event_loop().time() - start_time
+        test_result = EndpointTestResult(
+            endpoint="GET /api/v1/support/resources",
+            method="GET",
+            description=extract_docstring(support.get_support_resources),
+            input_data={},
+            output_data={},
+            status="error",
+            error_message=str(e),
+            execution_time=execution_time,
+        )
+        logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+        results.append(test_result)
 
+    # POST /api/v1/support/get-support
+    logger.info("Тест: POST /api/v1/support/get-support")
+    start_time = asyncio.get_event_loop().time()
+    try:
+        request = SupportRequest(
+            user_id=f"test_user_{uuid.uuid4().hex[:8]}",
+            message="Я чувствую, что не справляюсь с изучением алгоритмов",
+            emotional_state="frustrated",
+            language="ru",
+        )
+        result = await support.get_support(request)
+        execution_time = asyncio.get_event_loop().time() - start_time
+
+        session_id = result.support_message  # Just for tracking
+        test_result = EndpointTestResult(
+            endpoint="POST /api/v1/support/get-support",
+            method="POST",
+            description=extract_docstring(support.get_support),
+            input_data=request.model_dump(),
+            output_data={
+                "support_message": result.support_message,
+                "recommendations_count": len(result.recommendations),
+                "resources_count": len(result.resources),
+            },
+            status="success",
+            execution_time=execution_time,
+        )
+        logger.info(
+            f"✓ Успешно. Рекомендаций: {len(result.recommendations)}. Время: {execution_time:.3f}s"
+        )
+        results.append(test_result)
+    except Exception as e:
+        execution_time = asyncio.get_event_loop().time() - start_time
+        test_result = EndpointTestResult(
+            endpoint="POST /api/v1/support/get-support",
+            method="POST",
+            description=extract_docstring(support.get_support),
+            input_data={"message": "test", "emotional_state": "frustrated"},
+            output_data={},
+            status="error",
+            error_message=str(e),
+            execution_time=execution_time,
+        )
+        logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+        results.append(test_result)
+
+    # POST /api/v1/support/feedback (только если поддержка была получена)
+    if session_id and results[-1].status == "success":
+        logger.info("Тест: POST /api/v1/support/feedback")
+        start_time = asyncio.get_event_loop().time()
+        try:
+            request = SubmitFeedbackRequest(
+                session_id="test_session_id", helpful=True, comments="Спасибо, очень помогло!"
+            )
+            result = await support.submit_feedback(request)
+            execution_time = asyncio.get_event_loop().time() - start_time
+
+            test_result = EndpointTestResult(
+                endpoint="POST /api/v1/support/feedback",
+                method="POST",
+                description=extract_docstring(support.submit_feedback),
+                input_data=request.model_dump(),
+                output_data=result.model_dump(),
+                status="success",
+                execution_time=execution_time,
+            )
+            logger.info(f"✓ Успешно. Обратная связь принята. Время: {execution_time:.3f}s")
+            results.append(test_result)
+        except Exception as e:
+            execution_time = asyncio.get_event_loop().time() - start_time
+            test_result = EndpointTestResult(
+                endpoint="POST /api/v1/support/feedback",
+                method="POST",
+                description=extract_docstring(support.submit_feedback),
+                input_data={"session_id": "test", "helpful": True},
+                output_data={},
+                status="error",
+                error_message=str(e),
+                execution_time=execution_time,
+            )
+            logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+            results.append(test_result)
+    else:
+        logger.warning("⚠ Пропуск feedback теста - поддержка не была получена")
+
+    logger.info("")
     return results
 
 
-def generate_markdown(all_results: list) -> str:
-    """Генерация Markdown документации"""
+def generate_markdown_report(
+    all_results: list[EndpointTestResult], summary: EndpointTestSummary
+) -> str:
+    """Генерировать Markdown отчет."""
+    markdown = f"""# API Endpoints Test Report
 
-    markdown = f"""# API Endpoints Documentation
+Отчет создан: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
-Автоматически сгенерированная документация для всех API эндпоинтов.
+---
 
-**Дата генерации:** {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+## Общая статистика
+
+| Метрика | Значение |
+|---------|----------|
+| Всего тестов | {summary.total_tests} |
+| Успешных | {summary.successful_tests} ✓ |
+| Неудачных | {summary.failed_tests} ✗ |
+| Успешность | {summary.success_rate:.1f}% |
+| Общее время выполнения | {summary.execution_time:.2f}s |
 
 ---
 
 """
 
-    # Группируем результаты по модулям
-    modules = {
-        "Health": [],
+    # Группировка по модулям
+    modules: dict[str, list[EndpointTestResult]] = {
+        "System": [],
         "Assessment": [],
         "Materials": [],
         "Tests": [],
@@ -733,113 +1162,138 @@ def generate_markdown(all_results: list) -> str:
     }
 
     for result in all_results:
-        endpoint = result["endpoint"]
-        if "/health" in endpoint:
-            modules["Health"].append(result)
-        elif "/assessment" in endpoint:
+        endpoint = result.endpoint
+        if "health" in endpoint:
+            modules["System"].append(result)
+        elif "assessment" in endpoint:
             modules["Assessment"].append(result)
-        elif "/materials" in endpoint:
+        elif "materials" in endpoint:
             modules["Materials"].append(result)
-        elif "/tests" in endpoint:
+        elif "tests" in endpoint:
             modules["Tests"].append(result)
-        elif "/verification" in endpoint:
+        elif "verification" in endpoint:
             modules["Verification"].append(result)
-        elif "/llm-router" in endpoint:
+        elif "llm-router" in endpoint:
             modules["LLM Router"].append(result)
-        elif "/support" in endpoint:
+        elif "support" in endpoint:
             modules["Support"].append(result)
 
-    # Генерируем содержание
-    markdown += "## Содержание\n\n"
-    for module_name in modules:
-        if modules[module_name]:
-            markdown += f"- [{module_name}](#{module_name.lower().replace(' ', '-')})\n"
-    markdown += "\n---\n\n"
-
-    # Генерируем документацию для каждого модуля
-    for module_name, results in modules.items():
-        if not results:
+    # Генерация детальной информации по модулям
+    for module_name, module_results in modules.items():
+        if not module_results:
             continue
 
         markdown += f"## {module_name}\n\n"
 
-        for result in results:
-            status_emoji = "✅" if result["status"] == "success" else "❌"
+        for result in module_results:
+            status_icon = "✓" if result.status == "success" else "✗"
+            status_text = "SUCCESS" if result.status == "success" else "ERROR"
 
-            markdown += f"### {status_emoji} `{result['endpoint']}`\n\n"
-            markdown += f"**Описание:** {result['description']}\n\n"
+            markdown += f"### {status_icon} `{result.method} {result.endpoint}`\n\n"
+            markdown += f"**Статус:** {status_text}  \n"
+            markdown += f"**Время выполнения:** {result.execution_time:.3f}s  \n"
+            markdown += f"**Описание:** {result.description}\n\n"
 
-            markdown += "**Входные данные:**\n\n"
-            markdown += "```"
-            markdown += result["input"]
-            markdown += "\n```\n\n"
+            if result.input_data:
+                markdown += "**Входные данные:**\n```"
+                markdown += format_json(result.input_data)
+                markdown += "\n```\n\n"
 
-            markdown += "**Выходные данные:**\n\n"
-            markdown += "```"
-            markdown += result["output"]
-            markdown += "\n```\n\n"
+            if result.status == "success" and result.output_data:
+                markdown += "**Выходные данные:**\n```"
+                markdown += format_json(result.output_data)
+                markdown += "\n```\n\n"
+
+            if result.error_message:
+                markdown += "**Ошибка:**\n``````\n\n"
 
             markdown += "---\n\n"
-
-    # Добавляем статистику
-    total = len(all_results)
-    successful = sum(1 for r in all_results if r["status"] == "success")
-    failed = total - successful
-
-    markdown += f"""## Статистика
-
-- **Всего эндпоинтов:** {total}
-- **Успешных тестов:** {successful}
-- **Неудачных тестов:** {failed}
-- **Процент успеха:** {(successful / total * 100):.1f}%
-
-"""
 
     return markdown
 
 
 async def main() -> None:
-    """Основная функция"""
-    print("🚀 Начало тестирования API эндпоинтов...")
-    print()
+    """Главная функция для запуска всех тестов."""
+    logger.info("╔" + "═" * 78 + "╗")
+    logger.info("║" + " " * 20 + "ЗАПУСК ТЕСТИРОВАНИЯ API ЭНДПОИНТОВ" + " " * 24 + "║")
+    logger.info("╚" + "═" * 78 + "╝")
+    logger.info("")
 
-    all_results = []
+    # Инициализация переменных
+    all_results: list[EndpointTestResult] = []
+    start_time = asyncio.get_event_loop().time()
 
-    # Тестируем каждый модуль
-    modules = [
-        ("Health", test_health_endpoints),
-        ("Assessment", test_assessment_endpoints),
-        ("Materials", test_materials_endpoints),
-        ("Tests", test_tests_endpoints),
-        ("Verification", test_verification_endpoints),
-        ("LLM Router", test_llm_router_endpoints),
-        ("Support", test_support_endpoints),
-    ]
+    # Запуск тестов в логичном порядке
+    try:
+        # 1. System Health (базовая проверка)
+        health_results = await test_health_endpoints()
+        all_results.extend(health_results)
 
-    for module_name, test_func in modules:
-        print(f"📦 Тестирование модуля: {module_name}")
-        try:
-            results = await test_func()
-            all_results.extend(results)
-            print(f"   ✅ Протестировано эндпоинтов: {len(results)}")
-        except Exception as e:
-            print(f"   ❌ Ошибка при тестировании: {e!s}")
-        print()
+        # 2. Assessment (оценка пользователя)
+        assessment_results = await test_assessment_endpoints()
+        all_results.extend(assessment_results)
 
-    # Генерируем Markdown
-    print("📝 Генерация Markdown документации...")
-    markdown_content = generate_markdown(all_results)
+        # 3. Materials (получение материалов)
+        materials_results = await test_materials_endpoints()
+        all_results.extend(materials_results)
 
-    # Сохраняем в файл
-    output_file = Path(__file__).parent.parent.parent / "api_documentation.md"
+        # 4. Tests (генерация и отправка тестов)
+        tests_results = await test_tests_endpoints()
+        all_results.extend(tests_results)
+
+        # 5. Verification (проверка ответов)
+        verification_results = await test_verification_endpoints()
+        all_results.extend(verification_results)
+
+        # 6. LLM Router (маршрутизация запросов)
+        llm_router_results = await test_llm_router_endpoints()
+        all_results.extend(llm_router_results)
+
+        # 7. Support (психологическая поддержка)
+        support_results = await test_support_endpoints()
+        all_results.extend(support_results)
+
+    except Exception as e:
+        logger.exception(f"Критическая ошибка во время тестирования: {e}")
+
+    # Подсчет статистики
+    total_time = asyncio.get_event_loop().time() - start_time
+    successful = sum(1 for r in all_results if r.status == "success")
+    failed = len(all_results) - successful
+    success_rate = (successful / len(all_results) * 100) if all_results else 0
+
+    summary = EndpointTestSummary(
+        total_tests=len(all_results),
+        successful_tests=successful,
+        failed_tests=failed,
+        success_rate=success_rate,
+        execution_time=total_time,
+    )
+
+    # Генерация отчета
+    logger.info("=" * 80)
+    logger.info("ГЕНЕРАЦИЯ ОТЧЕТА")
+    logger.info("=" * 80)
+
+    markdown_content = generate_markdown_report(all_results, summary)
+
+    # Сохранение отчета
+    output_file = Path(__file__).parent.parent.parent / "api_test_report.md"
     output_file.write_text(markdown_content, encoding="utf-8")
 
-    print(f"✅ Документация сохранена: {output_file}")
-    print()
-    print(f"📊 Всего протестировано эндпоинтов: {len(all_results)}")
-    successful = sum(1 for r in all_results if r["status"] == "success")
-    print(f"✅ Успешных: {successful}")
-    print(f"❌ С ошибками: {len(all_results) - successful}")
+    # Вывод итоговой статистики
+    logger.info("")
+    logger.info("╔" + "═" * 78 + "╗")
+    logger.info("║" + " " * 28 + "ИТОГОВАЯ СТАТИСТИКА" + " " * 31 + "║")
+    logger.info("╠" + "═" * 78 + "╣")
+    logger.info(f"║  Всего тестов:     {len(all_results):<60} ║")
+    logger.info(f"║  Успешных:         {successful:<60} ║")
+    logger.info(f"║  Неудачных:        {failed:<60} ║")
+    logger.info(f"║  Успешность:       {success_rate:.1f}%{' ' * 56} ║")
+    logger.info(f"║  Время выполнения: {total_time:.2f}s{' ' * 54} ║")
+    logger.info("╠" + "═" * 78 + "╣")
+    logger.info(f"║  Отчет сохранен:   {output_file.name:<59} ║")
+    logger.info("╚" + "═" * 78 + "╝")
 
 
 if __name__ == "__main__":
