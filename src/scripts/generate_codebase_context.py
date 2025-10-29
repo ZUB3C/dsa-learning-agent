@@ -15,8 +15,31 @@ except ImportError:
     TIKTOKEN_AVAILABLE = False
 
 
+# Files to exclude from output (relative to project root)
+EXCLUDE_FILES = [
+    "src/scripts/generate_endpoint_report.py",
+]
+
+# Files outside src/ to forcefully include (relative to project root)
+INCLUDE_EXTERNAL_FILES = [
+    "README.md",
+]
+
+
+def is_excluded(filepath: Path, project_root: Path) -> bool:
+    """Check if file should be excluded."""
+    try:
+        relative_path = filepath.relative_to(project_root)
+        return str(relative_path) in EXCLUDE_FILES
+    except ValueError:
+        return False
+
+
 def generate_tree(
-    directory: Path, prefix: str = "", exclude_path: Path | None = None
+    directory: Path,
+    prefix: str = "",
+    exclude_path: Path | None = None,
+    project_root: Path | None = None,
 ) -> list[str]:
     """Generate a visual tree structure of the directory."""
     tree_lines: list[str] = []
@@ -40,6 +63,10 @@ def generate_tree(
             if exclude_path and item.resolve() == exclude_path.resolve():
                 continue
 
+            # Skip excluded files
+            if project_root and is_excluded(item, project_root):
+                continue
+
             # Create tree characters
             connector = "└── " if is_last_item else "├── "
             tree_lines.append(f"{prefix}{connector}{item.name}")
@@ -47,7 +74,7 @@ def generate_tree(
             # Recursively process directories
             if item.is_dir():
                 extension = "    " if is_last_item else "│   "
-                subtree = generate_tree(item, prefix + extension, exclude_path)
+                subtree = generate_tree(item, prefix + extension, exclude_path, project_root)
                 if subtree:  # Only add if directory has .py files
                     tree_lines.extend(subtree)
 
@@ -57,7 +84,9 @@ def generate_tree(
     return tree_lines
 
 
-def read_all_files(directory: Path, exclude_path: Path | None = None) -> list[dict[str, str]]:
+def read_all_files(
+    directory: Path, exclude_path: Path | None = None, project_root: Path | None = None
+) -> list[dict[str, str]]:
     """Read all .py files recursively from directory, excluding __pycache__."""
     file_contents: list[dict[str, str]] = []
 
@@ -80,6 +109,10 @@ def read_all_files(directory: Path, exclude_path: Path | None = None) -> list[di
             if exclude_path and filepath.resolve() == exclude_path.resolve():
                 continue
 
+            # Skip excluded files
+            if project_root and is_excluded(filepath, project_root):
+                continue
+
             # Get relative path for cleaner output
             relative_path = filepath.relative_to(directory.parent)
 
@@ -95,6 +128,32 @@ def read_all_files(directory: Path, exclude_path: Path | None = None) -> list[di
                     "path": str(relative_path),
                     "content": "[Unable to read file]",
                 })
+
+    return file_contents
+
+
+def read_external_files(project_root: Path) -> list[dict[str, str]]:
+    """Read external files that should be forcefully included."""
+    file_contents: list[dict[str, str]] = []
+
+    for file_path in INCLUDE_EXTERNAL_FILES:
+        filepath = project_root / file_path
+
+        if not filepath.exists():
+            print(f"⚠️  Warning: External file not found: {file_path}")
+            continue
+
+        try:
+            with filepath.open(encoding="utf-8") as f:
+                content = f.read()
+
+            file_contents.append({"path": file_path, "content": content})
+        except (UnicodeDecodeError, PermissionError) as e:
+            print(f"⚠️  Warning: Could not read {file_path}: {e}")
+            file_contents.append({
+                "path": file_path,
+                "content": "[Unable to read file]",
+            })
 
     return file_contents
 
@@ -125,15 +184,22 @@ def main() -> None:  # noqa: PLR0915
     # Set source directory (parent of scripts directory)
     src_dir: Path = Path(__file__).parent.parent
 
+    # Project root directory
+    project_root: Path = src_dir.parent
+
     # Output file location (in project root)
-    output_file: Path = src_dir.parent / "codebase_context.txt"
+    output_file: Path = project_root / "codebase_context.txt"
 
     # Model used for token counting
     model = "claude-sonnet-4-5"
 
     print(f"Scanning directory: {src_dir}")
     print(f"Output file: {output_file}")
-    print("Filtering: Only .py files, excluding __pycache__\n")
+    print("Filtering: Only .py files, excluding __pycache__")
+    print(f"Excluded files: {', '.join(EXCLUDE_FILES) if EXCLUDE_FILES else 'None'}")
+    print(
+        f"External files: {', '.join(INCLUDE_EXTERNAL_FILES) if INCLUDE_EXTERNAL_FILES else 'None'}\n"
+    )
 
     # Collect all content
     all_content: list[str] = []
@@ -151,9 +217,18 @@ def main() -> None:  # noqa: PLR0915
         structure_section += "-" * 80 + "\n"
         structure_section += f"{src_dir.name}/\n"
 
-        tree: list[str] = generate_tree(src_dir, exclude_path=script_path)
+        tree: list[str] = generate_tree(
+            src_dir, exclude_path=script_path, project_root=project_root
+        )
         for line in tree:
             structure_section += line + "\n"
+
+        # Add external files to tree
+        if INCLUDE_EXTERNAL_FILES:
+            structure_section += "\nExternal files:\n"
+            for ext_file in INCLUDE_EXTERNAL_FILES:
+                if (project_root / ext_file).exists():
+                    structure_section += f"├── {ext_file}\n"
 
         structure_section += "\n" + "=" * 80 + "\n\n"
         f.write(structure_section)
@@ -165,9 +240,18 @@ def main() -> None:  # noqa: PLR0915
         f.write(content_header)
         all_content.append(content_header)
 
-        files: list[dict[str, str]] = read_all_files(src_dir, exclude_path=script_path)
+        # Read external files first
+        external_files: list[dict[str, str]] = read_external_files(project_root)
 
-        for file_info in files:
+        # Read src files
+        src_files: list[dict[str, str]] = read_all_files(
+            src_dir, exclude_path=script_path, project_root=project_root
+        )
+
+        # Combine all files
+        all_files = external_files + src_files
+
+        for file_info in all_files:
             file_section = "\n" + "=" * 80 + "\n"
             file_section += f"FILE: {file_info['path']}\n"
             file_section += "=" * 80 + "\n\n"
@@ -181,15 +265,14 @@ def main() -> None:  # noqa: PLR0915
     full_text = "".join(all_content)
     char_count = len(full_text)
     token_count = count_tokens(full_text, model=model)
-    code_lines_count = len([i for i in full_text.split("\n") if i.strip()])
-    lines_count = len(list(full_text.split("\n")))
 
     # Print summary
-    print(f"✓ Successfully exported {len(files)} Python files")
+    print(f"✓ Successfully exported {len(all_files)} files")
+    print(f"  • External files: {len(external_files)}")
+    print(f"  • Source files: {len(src_files)}")
     print("\n📊 Statistics:")
-    print(f"  • Total files: {len(files)}")
+    print(f"  • Total files: {len(all_files)}")
     print(f"  • Total characters: {char_count:,}")
-    print(f"  • Total code lines: {code_lines_count:,} ({lines_count:,} with whitespaces)")
     print(f"  • Total tokens (estimated): {token_count:,}")
 
     if TIKTOKEN_AVAILABLE:
