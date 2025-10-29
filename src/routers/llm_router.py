@@ -52,19 +52,20 @@ async def select_and_generate(request: LLMRouterRequest) -> LLMRouterResponse:
 
 @router.get("/available-models")
 async def get_available_models() -> GetAvailableModelsResponse:
-    """Получить список доступных моделей"""
-    return GetAvailableModelsResponse(
-        models=[
-            ModelInfo(name="GigaChat", language="ru", provider="Sber"),
-            ModelInfo(name="DeepSeek", language="en", provider="DeepSeek"),
-        ],
-        capabilities={
-            "material_generation": True,
-            "task_generation": True,
-            "test_generation": True,
-            "question_answering": True,
-        },
-    )
+    """Получить список доступных LLM моделей."""
+    models = [
+        ModelInfo(name="GigaChat", language="ru", provider="Sber"),
+        ModelInfo(name="DeepSeek", language="en", provider="DeepSeek"),
+    ]
+
+    capabilities = {
+        "material_generation": True,
+        "task_generation": True,
+        "test_generation": True,
+        "question_answering": True,
+    }
+
+    return GetAvailableModelsResponse(models=models, capabilities=capabilities)
 
 
 @router.post("/route-request")

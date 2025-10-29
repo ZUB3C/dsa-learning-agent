@@ -14,6 +14,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from src.core.database import init_database
+
 # Добавление пути к проекту для импорта модулей
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -1297,4 +1299,5 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    init_database()
     asyncio.run(main())
