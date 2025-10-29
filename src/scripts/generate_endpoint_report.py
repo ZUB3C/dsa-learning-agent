@@ -58,6 +58,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+CONTENT_PREVIEW_LIMIT = 1000
+
+
 # Pydantic модель для результата проверки
 class EndpointTestResult(BaseModel):
     """Результат проверки одного API эндпоинта."""
@@ -380,8 +383,8 @@ async def test_materials_endpoints() -> list[EndpointTestResult]:
             description=extract_docstring(materials.get_materials),
             input_data=request.model_dump(),
             output_data={
-                "content_preview": result.content[:200] + "..."
-                if len(result.content) > 200
+                "content_preview": result.content[:CONTENT_PREVIEW_LIMIT] + "..."
+                if len(result.content) > CONTENT_PREVIEW_LIMIT
                 else result.content,
                 "sources": result.sources,
                 "adapted_for_level": result.adapted_for_level,
@@ -425,8 +428,8 @@ async def test_materials_endpoints() -> list[EndpointTestResult]:
             description=extract_docstring(materials.generate_material),
             input_data=request.model_dump(),
             output_data={
-                "material_preview": result.material[:200] + "..."
-                if len(result.material) > 200
+                "material_preview": result.material[:CONTENT_PREVIEW_LIMIT] + "..."
+                if len(result.material) > CONTENT_PREVIEW_LIMIT
                 else result.material,
                 "format": result.format,
                 "word_count": result.word_count,
@@ -873,7 +876,7 @@ async def test_verification_endpoints() -> list[EndpointTestResult]:
                 f"⚠ История пуста для пользователя {test_user_id}. Возможно, check-test не сохраняет user_id."
             )
             test_result = EndpointTestResult(
-                endpoint=f"GET /api/v1/verification/history/{{user_id}}",
+                endpoint="GET /api/v1/verification/history/{user_id}",
                 method="GET",
                 description=extract_docstring(verification.get_verification_history),
                 input_data={"user_id": test_user_id},
@@ -887,7 +890,7 @@ async def test_verification_endpoints() -> list[EndpointTestResult]:
             )
         else:
             test_result = EndpointTestResult(
-                endpoint=f"GET /api/v1/verification/history/{{user_id}}",
+                endpoint="GET /api/v1/verification/history/{user_id}",
                 method="GET",
                 description=extract_docstring(verification.get_verification_history),
                 input_data={"user_id": test_user_id},
@@ -914,7 +917,7 @@ async def test_verification_endpoints() -> list[EndpointTestResult]:
     except Exception as e:
         execution_time = asyncio.get_event_loop().time() - start_time
         test_result = EndpointTestResult(
-            endpoint=f"GET /api/v1/verification/history/{{user_id}}",
+            endpoint="GET /api/v1/verification/history/{user_id}",
             method="GET",
             description=extract_docstring(verification.get_verification_history),
             input_data={"user_id": test_user_id},
@@ -1029,8 +1032,9 @@ async def test_llm_router_endpoints() -> list[EndpointTestResult]:
             description=extract_docstring(llm_router.select_and_generate),
             input_data=request.model_dump(),
             output_data={
-                "generated_content_preview": result.generated_content[:200] + "..."
-                if len(result.generated_content) > 200
+                "generated_content_preview": result.generated_content[:CONTENT_PREVIEW_LIMIT]
+                + "..."
+                if len(result.generated_content) > CONTENT_PREVIEW_LIMIT
                 else result.generated_content,
                 "model_used": result.model_used,
             },
