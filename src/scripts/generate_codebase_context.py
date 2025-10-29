@@ -181,12 +181,15 @@ def main() -> None:  # noqa: PLR0915
     full_text = "".join(all_content)
     char_count = len(full_text)
     token_count = count_tokens(full_text, model=model)
+    code_lines_count = len([i for i in full_text.split("\n") if i.strip()])
+    lines_count = len(list(full_text.split("\n")))
 
     # Print summary
     print(f"✓ Successfully exported {len(files)} Python files")
     print("\n📊 Statistics:")
     print(f"  • Total files: {len(files)}")
     print(f"  • Total characters: {char_count:,}")
+    print(f"  • Total code lines: {code_lines_count:,} ({lines_count:,} with whitespaces)")
     print(f"  • Total tokens (estimated): {token_count:,}")
 
     if TIKTOKEN_AVAILABLE:
