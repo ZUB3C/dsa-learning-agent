@@ -99,19 +99,22 @@ def read_all_files(directory: Path, exclude_path: Path | None = None) -> list[di
     return file_contents
 
 
-def count_tokens(text: str, encoding_name: str = "cl100k_base") -> int:
-    """Count tokens using tiktoken."""
-    if not TIKTOKEN_AVAILABLE:
-        # Rough estimation: ~4 characters per token
-        print("TikToken isn't available. Rough estimation: ~4 characters per token")
-        return len(text) // 4
+def count_tokens(text: str, model: str = "claude-sonnet-4-5") -> int:
+    """Offline token counting for Claude models (approximation)."""
 
-    try:
-        encoding = tiktoken.get_encoding(encoding_name)
+    if "claude" in model.lower():
+        # Use p50k_base encoding as approximation for Claude
+        try:
+            encoding = tiktoken.get_encoding("p50k_base")
+            # Claude typically uses 16-30% more tokens than GPT models
+            estimated_tokens = len(encoding.encode(text))
+            return int(estimated_tokens * 1.2)  # Add 20% buffer
+        except Exception:
+            return len(text) // 4
+    else:
+        # For GPT models
+        encoding = tiktoken.get_encoding("cl100k_base")
         return len(encoding.encode(text))
-    except Exception:
-        # Fallback to estimation
-        return len(text) // 4
 
 
 def main() -> None:  # noqa: PLR0915
@@ -124,6 +127,9 @@ def main() -> None:  # noqa: PLR0915
 
     # Output file location (in project root)
     output_file: Path = src_dir.parent / "codebase_context.txt"
+
+    # Model used for token counting
+    model = "claude-sonnet-4-5"
 
     print(f"Scanning directory: {src_dir}")
     print(f"Output file: {output_file}")
@@ -171,35 +177,26 @@ def main() -> None:  # noqa: PLR0915
             f.write(file_section)
             all_content.append(file_section)
 
-        # Calculate statistics
-        full_text = "".join(all_content)
-        char_count = len(full_text)
-        token_count = count_tokens(full_text)
-
-        # Write statistics
-        stats = "\n" + "=" * 80 + "\n"
-        stats += "STATISTICS\n"
-        stats += "=" * 80 + "\n"
-        stats += f"Total files: {len(files)}\n"
-        stats += f"Total characters: {char_count:,}\n"
-        stats += f"Total tokens (estimated): {token_count:,}\n"
-        if TIKTOKEN_AVAILABLE:
-            stats += "Token encoding: cl100k_base (GPT-4/GPT-3.5-turbo)\n"
-        else:
-            stats += "Token estimation: ~4 chars/token (tiktoken not available)\n"
-        stats += "=" * 80 + "\n"
-
-        f.write(stats)
+    # Calculate statistics (don't write to file, only print)
+    full_text = "".join(all_content)
+    char_count = len(full_text)
+    token_count = count_tokens(full_text, model=model)
 
     # Print summary
     print(f"✓ Successfully exported {len(files)} Python files")
     print("\n📊 Statistics:")
+    print(f"  • Total files: {len(files)}")
     print(f"  • Total characters: {char_count:,}")
-    print(f"  • Total tokens: {token_count:,}")
+    print(f"  • Total tokens (estimated): {token_count:,}")
+
     if TIKTOKEN_AVAILABLE:
-        print("  • Encoding: cl100k_base (GPT-4/GPT-3.5-turbo)")
+        if "claude" in model.lower():
+            print(f"  • Token encoding: p50k_base approximation for {model} (+20% buffer)")
+        else:
+            print(f"  • Token encoding: cl100k_base for {model}")
     else:
-        print("  • Note: Install tiktoken for accurate token counting")
+        print("  • Token estimation: ~4 chars/token (tiktoken not available)")
+
     print(f"\n💾 Output: {output_file}")
 
 
