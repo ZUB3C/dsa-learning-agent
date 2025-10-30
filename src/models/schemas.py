@@ -241,7 +241,6 @@ class RouteRequestResponse(BaseModel):
 
 # Модуль 6: Психологическая поддержка
 class SupportRequest(BaseModel):
-    user_id: str
     message: str
     emotional_state: str = Field(
         description="Эмоциональное состояние (stressed, confused, motivated, etc.)"

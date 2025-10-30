@@ -22,18 +22,16 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 # Импорт роутеров
 # Импорт всех схем из models
 from ..models.schemas import (
-    # Materials schemas
     AddCustomTopicRequest,
+    # Materials schemas
     AskQuestionRequest,
     # Assessment schemas
     AssessmentStartRequest,
     AssessmentSubmitRequest,
     GenerateMaterialRequest,
-    # Tests schemas
     GenerateTaskRequest,
     GenerateTestRequest,
     GetMaterialsRequest,
-    # LLM Router schemas
     LLMRouterRequest,
     RouteRequestRequest,
     SearchMaterialsRequest,
@@ -459,7 +457,9 @@ async def test_materials_endpoints() -> list[EndpointTestResult]:
         results.append(test_result)
 
     # POST /api/v1/materials/ask-question (только если материал был сгенерирован)
-    if generated_topic_id and results[-1].status == "success":
+    # if generated_topic_id and results[-1].status == "success":
+    if True:
+        generated_topic_id = "generated_cc8f0fe7-94b4-4400-afeb-925375abd36b"
         logger.info(f"Тест: POST /api/v1/materials/ask-question для темы {generated_topic_id}")
         start_time = asyncio.get_event_loop().time()
         try:
@@ -505,7 +505,7 @@ async def test_materials_endpoints() -> list[EndpointTestResult]:
     start_time = asyncio.get_event_loop().time()
     try:
         request = SearchMaterialsRequest(
-            query="алгоритмы сортировки", filters={"level": "beginner"}
+            query="Сортировка пузырьком", filters={"level": "beginner"}
         )
         result = await materials.search_materials(request)
         execution_time = asyncio.get_event_loop().time() - start_time
@@ -818,7 +818,7 @@ async def test_verification_endpoints() -> list[EndpointTestResult]:
             error_message=str(e),
             execution_time=execution_time,
         )
-        logger.error(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+        logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
         results.append(test_result)
 
     # Добавляем еще один тест проверки для создания истории
@@ -860,7 +860,7 @@ async def test_verification_endpoints() -> list[EndpointTestResult]:
             error_message=str(e),
             execution_time=execution_time,
         )
-        logger.error(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+        logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
         results.append(test_result)
 
     # GET /api/v1/verification/history/{user_id} (теперь должен найти данные)
@@ -926,7 +926,7 @@ async def test_verification_endpoints() -> list[EndpointTestResult]:
             error_message=str(e),
             execution_time=execution_time,
         )
-        logger.error(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
+        logger.exception(f"✗ Ошибка: {e}. Время: {execution_time:.3f}s")
         results.append(test_result)
 
     logger.info("")
@@ -1051,7 +1051,12 @@ async def test_llm_router_endpoints() -> list[EndpointTestResult]:
             endpoint="POST /api/v1/llm-router/select-and-generate",
             method="POST",
             description=extract_docstring(llm_router.select_and_generate),
-            input_data={"request_type": "material", "content": "test"},
+            input_data={
+                "request_type": "material",
+                "content": "Сгенерируй материал по теме Очередь",
+                "topic": "Бинарный поиск",
+                "format": "summary",
+            },
             output_data={},
             status="error",
             error_message=str(e),
@@ -1117,10 +1122,8 @@ async def test_support_endpoints() -> list[EndpointTestResult]:
     start_time = asyncio.get_event_loop().time()
     try:
         request = SupportRequest(
-            user_id=f"test_user_{uuid.uuid4().hex[:8]}",
             message="Я чувствую, что не справляюсь с изучением алгоритмов",
             emotional_state="frustrated",
-            language="ru",
         )
         result = await support.get_support(request)
         execution_time = asyncio.get_event_loop().time() - start_time
@@ -1301,12 +1304,12 @@ async def main() -> None:
     # Запуск тестов в логичном порядке
     try:
         # 1. System Health (базовая проверка)
-        # health_results = await test_health_endpoints()
-        # all_results.extend(health_results)
+        health_results = await test_health_endpoints()
+        all_results.extend(health_results)
 
         # 2. Assessment (оценка пользователя)
-        # assessment_results = await test_assessment_endpoints()
-        # all_results.extend(assessment_results)
+        assessment_results = await test_assessment_endpoints()
+        all_results.extend(assessment_results)
 
         # 3. Materials (получение материалов)
         materials_results = await test_materials_endpoints()

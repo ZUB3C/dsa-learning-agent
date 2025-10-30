@@ -108,8 +108,9 @@ async def generate_task(request: GenerateTaskRequest) -> GenerateTaskResponse:
             questions = task_data.get("questions", [])
             if questions:
                 task_question = questions[0]
+                task_id = uuid.uuid4()
                 task = Task(
-                    task_id=task_question.get("question_id"),
+                    task_id=task_id,
                     description=task_question.get("question_text"),
                     topic=request.topic,
                     difficulty=request.difficulty,
@@ -126,7 +127,7 @@ async def generate_task(request: GenerateTaskRequest) -> GenerateTaskResponse:
                 # Сохраняем задачу в БД
                 with get_db_session() as session:
                     test = Test(
-                        test_id=str(task.task_id),
+                        test_id=task_id,
                         topic=request.topic,
                         difficulty=request.difficulty,
                         questions=json.dumps([task.dict()]),

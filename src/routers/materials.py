@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from langchain_core.documents import Document
 
 from ..agents.llm_router_agent import LLMRouter
+from ..agents.materials_agent import retrieve_materials
 from ..agents.registry import load_agent
 from ..core.database import CustomTopic, get_db_session, get_or_create_user
 from ..core.vector_store import vector_store_manager
@@ -65,6 +66,9 @@ async def ask_question(request: AskQuestionRequest) -> AskQuestionResponse:
         answer = await materials_agent.ainvoke({
             "topic": request.context_topic,
             "user_level": request.user_level,
+            "retrieved_materials": retrieve_materials(
+                topic=request.context_topic, user_level=request.user_level
+            ),
             "question": request.question,
         })
 
