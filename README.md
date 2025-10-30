@@ -215,7 +215,7 @@ uv run python -m src.scripts.generate_endpoint_report
 
 ## 🧠 Примеры использования
 
-### TODO
+### Примеры использования всех API Endpoints находятся в файле [api-examples-report.md](api-examples-report.md)
 
 ***
 
