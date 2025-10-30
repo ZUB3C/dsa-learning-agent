@@ -176,6 +176,18 @@ def count_tokens(text: str, model: str = "claude-sonnet-4-5") -> int:
         return len(encoding.encode(text))
 
 
+def count_lines(content: str) -> tuple[int, int]:
+    """Count total lines and non-blank lines in content.
+
+    Returns:
+        tuple: (total_lines, non_blank_lines)
+    """
+    lines = content.splitlines()
+    total_lines = len(lines)
+    non_blank_lines = sum(1 for line in lines if line.strip())
+    return total_lines, non_blank_lines
+
+
 def main() -> None:  # noqa: PLR0915
     """Main function to generate codebase context file."""
     # Get the script's own path to exclude it
@@ -203,6 +215,10 @@ def main() -> None:  # noqa: PLR0915
 
     # Collect all content
     all_content: list[str] = []
+
+    # Initialize line counters
+    total_lines = 0
+    non_blank_lines = 0
 
     with Path(output_file).open("w", encoding="utf-8") as f:
         # Write header
@@ -252,6 +268,11 @@ def main() -> None:  # noqa: PLR0915
         all_files = external_files + src_files
 
         for file_info in all_files:
+            # Count lines for this file
+            file_total, file_non_blank = count_lines(file_info["content"])
+            total_lines += file_total
+            non_blank_lines += file_non_blank
+
             file_section = "\n" + "=" * 80 + "\n"
             file_section += f"FILE: {file_info['path']}\n"
             file_section += "=" * 80 + "\n\n"
@@ -272,6 +293,8 @@ def main() -> None:  # noqa: PLR0915
     print(f"  • Source files: {len(src_files)}")
     print("\n📊 Statistics:")
     print(f"  • Total files: {len(all_files)}")
+    print(f"  • Total lines: {total_lines:,}")
+    print(f"  • Code lines (non-blank): {non_blank_lines:,}")
     print(f"  • Total characters: {char_count:,}")
     print(f"  • Total tokens (estimated): {token_count:,}")
 
