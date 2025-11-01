@@ -9,6 +9,7 @@ from ..models.schemas import (
     GetVerificationHistoryResponse,
     TestVerificationRequest,
     TestVerificationResponse,
+    VerificationDetails,
     VerificationHistoryItem,
 )
 
@@ -17,7 +18,7 @@ router = APIRouter(prefix="/api/v1/verification", tags=["Verification"])
 
 @router.post("/check-test")
 async def check_test(request: TestVerificationRequest) -> TestVerificationResponse:
-    """Проверка ответа на тест с двойной верификацией"""
+    """Проверка ответа с опциональной двойной верификацией"""
 
     try:
         # Первичная проверка
@@ -33,32 +34,38 @@ async def check_test(request: TestVerificationRequest) -> TestVerificationRespon
         except json.JSONDecodeError:
             raise HTTPException(status_code=500, detail="Failed to parse primary evaluation")
 
-        # Вторичная проверка (перекрёстная верификация другой моделью)
-        secondary_agent = load_agent("verification-secondary", language=request.language)
-        secondary_result = await secondary_agent.ainvoke({
-            "primary_evaluation": json.dumps(primary_eval, ensure_ascii=False),
-            "question": request.question,
-            "user_answer": request.user_answer,
-        })
+        # Генерируем ID верификации
+        verification_id = str(uuid.uuid4())
+
+        # Инициализируем переменные для вторичной проверки
+        secondary_eval = None
+        is_correct = primary_eval.get("is_correct", False)
+        final_score = primary_eval.get("score", 0)
+        final_feedback = primary_eval.get("feedback", "")
+
+        # Выполняем вторичную проверку только если включена
+        if request.secondary_check:
+            secondary_agent = load_agent("verification-secondary", language=request.language)
+            secondary_result = await secondary_agent.ainvoke({
+                "primary_evaluation": json.dumps(primary_eval, ensure_ascii=False),
+                "question": request.question,
+                "user_answer": request.user_answer,
+            })
 
         try:
             secondary_eval = json.loads(secondary_result)
         except json.JSONDecodeError:
             raise HTTPException(status_code=500, detail="Failed to parse secondary evaluation")
 
-        verification_id = str(uuid.uuid4())
-        is_correct = secondary_eval.get("final_score", 0) >= 70
-
-        # Извлекаем user_id из test_results
+        # Получаем user_id из тестового результата или используем "unknown"
         with get_db_session() as session:
             test_result = (
                 session.query(TestResult).filter(TestResult.test_id == request.test_id).first()
             )
-            user_id = test_result.user_id if test_result else "unknown"
+            user_id = test_result.userid if test_result else "unknown"
+            get_or_create_user(user_id)
 
-        get_or_create_user(user_id)
-
-        # Сохраняем результат с деталями двойной проверки
+        # Сохраняем результат в БД
         with get_db_session() as session:
             verification = Verification(
                 verification_id=verification_id,
@@ -67,22 +74,29 @@ async def check_test(request: TestVerificationRequest) -> TestVerificationRespon
                 question=request.question,
                 user_answer=request.user_answer,
                 is_correct=is_correct,
-                score=secondary_eval.get("final_score", 0),
-                feedback=secondary_eval.get("final_feedback", ""),
+                score=final_score,
+                feedback=final_feedback,
             )
             session.add(verification)
 
+        # Формируем детали верификации
+        verification_details = VerificationDetails(
+            verification_id=verification_id,
+            primary_score=primary_eval.get("score", 0),
+            secondary_score=secondary_eval.get("final_score") if secondary_eval else None,
+            agree_with_primary=secondary_eval.get("agree_with_primary")
+            if secondary_eval
+            else None,
+            verification_notes=secondary_eval.get("verification_notes", "")
+            if secondary_eval
+            else None,
+        )
+
         return TestVerificationResponse(
             is_correct=is_correct,
-            score=secondary_eval.get("final_score", 0),
-            feedback=secondary_eval.get("final_feedback", ""),
-            verification_details={
-                "verification_id": verification_id,
-                "primary_score": primary_eval.get("score", 0),
-                "secondary_score": secondary_eval.get("final_score", 0),
-                "agree_with_primary": secondary_eval.get("agree_with_primary", True),
-                "verification_notes": secondary_eval.get("verification_notes", ""),
-            },
+            score=final_score,
+            feedback=final_feedback,
+            verification_details=verification_details,
         )
 
     except Exception as e:

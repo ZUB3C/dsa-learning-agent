@@ -4,19 +4,30 @@ from pydantic import BaseModel, Field
 
 
 # Модуль 1: Проверка тестирований
+class VerificationDetails(BaseModel):
+    verification_id: str = Field(description="ID верификации")
+    primary_score: float = Field(description="Оценка первичной проверки")
+    secondary_score: float | None = Field(default=None, description="Оценка вторичной проверки")
+    agree_with_primary: bool | None = Field(
+        default=None, description="Согласие вторичной проверки с первичной"
+    )
+    verification_notes: str | None = Field(default=None, description="Заметки вторичной проверки")
+
+
 class TestVerificationRequest(BaseModel):
     test_id: str = Field(description="ID теста")
     user_answer: str = Field(description="Ответ пользователя")
     language: str = Field(default="ru", description="Язык (ru/en)")
     question: str = Field(description="Текст вопроса")
     expected_answer: str | None = Field(default=None, description="Эталонный ответ")
+    secondary_check: bool = Field(default=True, description="Включить вторичную проверку")
 
 
 class TestVerificationResponse(BaseModel):
     is_correct: bool = Field(description="Правильность ответа")
     score: float = Field(description="Оценка от 0 до 100")
     feedback: str = Field(description="Обратная связь")
-    verification_details: dict[str, Any] = Field(description="Детали проверки")
+    verification_details: VerificationDetails = Field(description="Детали проверки")
 
 
 # Модуль 2: Первичная оценка

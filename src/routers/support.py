@@ -28,7 +28,7 @@ async def get_support(request: SupportRequest) -> SupportResponse:
 
         # Генерируем ответ
         response = await support_agent.ainvoke({
-            "user_message": request.message,
+            "message": request.message,
             "emotional_state": request.emotional_state,
             "user_id": request.user_id,
         })
