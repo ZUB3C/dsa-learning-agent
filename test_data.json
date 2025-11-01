@@ -1,0 +1,128 @@
+{
+  "test_collection": {
+    "creation_date": "2025-11-02",
+    "total_questions": 30,
+    "topics_count": 3,
+    "tests": [
+      {
+        "test_id": "ADS_SORT_001",
+        "topic": "Алгоритмы сортировки",
+        "questions": [
+          {
+            "question_id": 1,
+            "difficulty": "easy",
+            "question_text": "Объясните, почему Bubble Sort неэффективен?",
+            "expected_answer": "O(n²) временная сложность",
+            "key_points": [
+              "O(n²)",
+              "Множество проходов"
+            ]
+          },
+          {
+            "question_id": 2,
+            "difficulty": "easy",
+            "question_text": "Что такое стабильная сортировка?",
+            "expected_answer": "Сохранение порядка равных элементов",
+            "key_points": [
+              "Порядок элементов",
+              "Merge Sort, Insertion Sort"
+            ]
+          },
+          {
+            "question_id": 3,
+            "difficulty": "medium",
+            "question_text": "Как работает Quick Sort?",
+            "expected_answer": "Разделение на две части по pivot",
+            "key_points": [
+              "Pivot",
+              "Разделение"
+            ]
+          },
+          {
+            "question_id": 4,
+            "difficulty": "hard",
+            "question_text": "Объясните Radix Sort",
+            "expected_answer": "Сортировка по разрядам O(d(n+k))",
+            "key_points": [
+              "Разряды",
+              "Линейная сложность"
+            ]
+          }
+        ]
+      },
+      {
+        "test_id": "ADS_TREE_002",
+        "topic": "Структуры данных",
+        "questions": [
+          {
+            "question_id": 5,
+            "difficulty": "easy",
+            "question_text": "Полное vs совершенное дерево?",
+            "expected_answer": "Совершенное - все уровни заполнены, полное - заполнено слева",
+            "key_points": [
+              "Совершенное",
+              "Полное"
+            ]
+          },
+          {
+            "question_id": 6,
+            "difficulty": "medium",
+            "question_text": "Что такое AVL-дерево?",
+            "expected_answer": "Самобалансирующееся BST с высотой O(log n)",
+            "key_points": [
+              "Баланс",
+              "Ротации"
+            ]
+          },
+          {
+            "question_id": 7,
+            "difficulty": "hard",
+            "question_text": "Red-Black дерево?",
+            "expected_answer": "RB-дерево с цветовой балансировкой",
+            "key_points": [
+              "Цвет",
+              "Высота log n"
+            ]
+          }
+        ]
+      },
+      {
+        "test_id": "ADS_GRAPH_003",
+        "topic": "Графы",
+        "questions": [
+          {
+            "question_id": 8,
+            "difficulty": "easy",
+            "question_text": "Матрица vs список смежности?",
+            "expected_answer": "Матрица O(n²), список O(n+m)",
+            "key_points": [
+              "Память",
+              "Производительность"
+            ]
+          },
+          {
+            "question_id": 9,
+            "difficulty": "medium",
+            "question_text": "Топологическая сортировка?",
+            "expected_answer": "Упорядочение вершин DAG",
+            "key_points": [
+              "DAG",
+              "Ациклический"
+            ]
+          },
+          {
+            "question_id": 10,
+            "difficulty": "hard",
+            "question_text": "Алгоритм Косарайю?",
+            "expected_answer": "Два прохода DFS для SCC",
+            "key_points": [
+              "DFS",
+              "SCC",
+              "Транспонирование"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

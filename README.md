@@ -300,4 +300,8 @@ scoop install just
 just format
 ```
 
-***
+## 💊 Создание отчёта для метрик агента верификации
+
+```bash
+uv run python -m src.scripts.measure_secondary_verification --test-data test_data.json --output report.md
+```

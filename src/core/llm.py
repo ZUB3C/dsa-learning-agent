@@ -2,6 +2,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 from ..config import settings
 
@@ -12,12 +13,11 @@ def get_gigachat_llm(
     timeout: int | None = None,
 ) -> BaseChatModel:
     """Получить LLM для GigaChat (русский язык)"""
-    return ChatOpenAI(
+    return ChatGoogleGenerativeAI(
         api_key=settings.gigachat_api_key or None,
         model=model or settings.gigachat_model,
         temperature=temperature if temperature is not None else settings.llm_temperature,
         timeout=timeout or settings.timeout_s,
-        base_url=settings.gigachat_base_url or None,
     )
 
 
