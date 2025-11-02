@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "dsa-learning-agent"
 requires-python = ">=3.13"
 dependencies = [
+    "aiofiles>=25.1.0",
     "chromadb>=1.2.2",
     "fastapi>=0.120.1",
     "langchain>=1.0.2",
@@ -67,22 +68,20 @@ ignore = [
     "TRY003", # avoid specifying long messages outside the exception class
     "EM102", # exception must not use an f-string literal, assign to variable first
     "BLE001", # allow catchign blind exception: `Exception`
-    #    "ASYNC109",
     "RUF001",
     "RUF002",
     "RUF003",
-    #    "ANN201", # return type hints
-    #    "ANN001",
-    "TID252",
-    "TD", # TODO
-    "FIX002", # TODO
-
-    "ARG001",
-    "B904",
-    "G004",
-    "FBT001", # allow boolean-typed positional argument in function definition
-    "FBT002", # "alow boolean default positional argument in function definition
-    "TRY401",
+    "TID252", # prefer relative imports over absolute imports from parent module
+    "B904", # raise HTTPException inside except block
+    "G003", # allow logging statement which uses `+`
+    "G004", # allow logging statement with f-string
+    "TRY401", # allow logging exceptions
+    "DTZ005", # no timezone argument
+    "PLR2004", # allow magic values
+    "FURB113", # don't replace append with extend
+    "PLR0915", # allow too many statement
+    "C901", # allow too complex function
+    "PLR0912", # allow too many branches
 ]
 
 [tool.basedpyright]

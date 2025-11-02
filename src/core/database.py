@@ -1,6 +1,4 @@
-"""
-Модуль для работы с базой данных через SQLAlchemy
-"""
+"""Модуль для работы с базой данных через SQLAlchemy."""
 
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -13,11 +11,11 @@ from ..config import settings
 
 
 class Base(DeclarativeBase):
-    """Базовый класс для всех моделей"""
+    """Базовый класс для всех моделей."""
 
 
 class User(Base):
-    """Таблица пользователей"""
+    """Таблица пользователей."""
 
     __tablename__ = "users"
 
@@ -26,7 +24,7 @@ class User(Base):
 
 
 class AssessmentSession(Base):
-    """Таблица сессий оценки"""
+    """Таблица сессий оценки."""
 
     __tablename__ = "assessment_sessions"
 
@@ -37,7 +35,7 @@ class AssessmentSession(Base):
 
 
 class Assessment(Base):
-    """Таблица результатов оценки"""
+    """Таблица результатов оценки."""
 
     __tablename__ = "assessments"
 
@@ -52,7 +50,7 @@ class Assessment(Base):
 
 
 class Test(Base):
-    """Таблица тестов"""
+    """Таблица тестов."""
 
     __tablename__ = "tests"
 
@@ -65,7 +63,7 @@ class Test(Base):
 
 
 class TestResult(Base):
-    """Таблица результатов тестов"""
+    """Таблица результатов тестов."""
 
     __tablename__ = "test_results"
 
@@ -77,7 +75,7 @@ class TestResult(Base):
 
 
 class Verification(Base):
-    """Таблица проверок"""
+    """Таблица проверок."""
 
     __tablename__ = "verifications"
 
@@ -93,7 +91,7 @@ class Verification(Base):
 
 
 class CustomTopic(Base):
-    """Таблица пользовательских тем"""
+    """Таблица пользовательских тем."""
 
     __tablename__ = "custom_topics"
 
@@ -105,7 +103,7 @@ class CustomTopic(Base):
 
 
 class SupportSession(Base):
-    """Таблица сессий поддержки"""
+    """Таблица сессий поддержки."""
 
     __tablename__ = "support_sessions"
 
@@ -127,7 +125,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 @contextmanager
 def get_db_session() -> Generator[Session]:
-    """Контекстный менеджер для работы с БД через SQLAlchemy"""
+    """Контекстный менеджер для работы с БД через SQLAlchemy."""
     session = SessionLocal()
     try:
         yield session
@@ -140,12 +138,12 @@ def get_db_session() -> Generator[Session]:
 
 
 def init_database() -> None:
-    """Инициализация базы данных - создание всех таблиц"""
+    """Инициализация базы данных - создание всех таблиц."""
     Base.metadata.create_all(bind=engine)
 
 
 def get_or_create_user(user_id: str) -> User:
-    """Получить или создать пользователя"""
+    """Получить или создать пользователя."""
     with get_db_session() as session:
         user = session.query(User).filter(User.user_id == user_id).first()
         if not user:

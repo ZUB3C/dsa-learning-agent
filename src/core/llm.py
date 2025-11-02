@@ -12,7 +12,7 @@ def get_gigachat_llm(
     temperature: float | None = None,
     timeout: int | None = None,
 ) -> BaseChatModel:
-    """Получить LLM для GigaChat (русский язык)"""
+    """Получить LLM для GigaChat (русский язык)."""
     return ChatGoogleGenerativeAI(
         api_key=settings.gigachat_api_key or None,
         model=model or settings.gigachat_model,
@@ -26,7 +26,7 @@ def get_deepseek_llm(
     temperature: float | None = None,
     timeout: int | None = None,
 ) -> BaseChatModel:
-    """Получить LLM для DeepSeek (английский язык)"""
+    """Получить LLM для DeepSeek (английский язык)."""
     return ChatOpenAI(
         api_key=settings.deepseek_api_key or None,
         model=model or settings.deepseek_model,
@@ -37,7 +37,7 @@ def get_deepseek_llm(
 
 
 def get_llm_by_language(language: str) -> BaseChatModel:
-    """Получить подходящую LLM в зависимости от языка"""
+    """Получить подходящую LLM в зависимости от языка."""
     if language.lower() in {"ru", "russian", "русский"}:
         return get_gigachat_llm()
     if language.lower() in {"en", "english", "английский"}:
@@ -47,7 +47,7 @@ def get_llm_by_language(language: str) -> BaseChatModel:
 
 
 def simple_chain(system_msg: str, language: str = "ru") -> ChatPromptTemplate:
-    """Создать простую цепочку с системным промптом"""
+    """Создать простую цепочку с системным промптом."""
     prompt = ChatPromptTemplate.from_messages([("system", system_msg), ("human", "{input}")])
     llm = get_llm_by_language(language)
     return prompt | llm | StrOutputParser()

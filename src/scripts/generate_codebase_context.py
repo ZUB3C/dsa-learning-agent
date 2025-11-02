@@ -160,7 +160,6 @@ def read_external_files(project_root: Path) -> list[dict[str, str]]:
 
 def count_tokens(text: str, model: str = "claude-sonnet-4-5") -> int:
     """Offline token counting for Claude models (approximation)."""
-
     if "claude" in model.lower():
         # Use p50k_base encoding as approximation for Claude
         try:
@@ -177,10 +176,12 @@ def count_tokens(text: str, model: str = "claude-sonnet-4-5") -> int:
 
 
 def count_lines(content: str) -> tuple[int, int]:
-    """Count total lines and non-blank lines in content.
+    """
+    Count total lines and non-blank lines in content.
 
     Returns:
         tuple: (total_lines, non_blank_lines)
+
     """
     lines = content.splitlines()
     total_lines = len(lines)
@@ -188,7 +189,7 @@ def count_lines(content: str) -> tuple[int, int]:
     return total_lines, non_blank_lines
 
 
-def main() -> None:  # noqa: PLR0915
+def main() -> None:
     """Main function to generate codebase context file."""
     # Get the script's own path to exclude it
     script_path: Path = Path(__file__).resolve()
@@ -210,7 +211,7 @@ def main() -> None:  # noqa: PLR0915
     print("Filtering: Only .py files, excluding __pycache__")
     print(f"Excluded files: {', '.join(EXCLUDE_FILES) if EXCLUDE_FILES else 'None'}")
     print(
-        f"External files: {', '.join(INCLUDE_EXTERNAL_FILES) if INCLUDE_EXTERNAL_FILES else 'None'}\n"
+        f"External files: {', '.join(INCLUDE_EXTERNAL_FILES) if INCLUDE_EXTERNAL_FILES else 'None'}\n"  # noqa: E501
     )
 
     # Collect all content

@@ -29,8 +29,7 @@ router = APIRouter(prefix="/api/v1/materials", tags=["Materials"])
 
 @router.post("/get-materials")
 async def get_materials(request: GetMaterialsRequest) -> GetMaterialsResponse:
-    """Получить адаптированные учебные материалы"""
-
+    """Получить адаптированные учебные материалы."""
     try:
         # Поиск в векторном хранилище
         documents = vector_store_manager.similarity_search(query=request.topic, k=5)
@@ -58,8 +57,7 @@ async def get_materials(request: GetMaterialsRequest) -> GetMaterialsResponse:
 
 @router.post("/ask-question")
 async def ask_question(request: AskQuestionRequest) -> AskQuestionResponse:
-    """Задать вопрос по материалу"""
-
+    """Задать вопрос по материалу."""
     try:
         materials_agent = load_agent("materials", language=request.language)
 
@@ -80,8 +78,7 @@ async def ask_question(request: AskQuestionRequest) -> AskQuestionResponse:
 
 @router.post("/generate-material")
 async def generate_material(request: GenerateMaterialRequest) -> GenerateMaterialResponse:
-    """Сгенерировать учебный материал"""
-
+    """Сгенерировать учебный материал."""
     try:
         # Создаем роутер напрямую
         router_instance = LLMRouter(language=request.language)
@@ -98,7 +95,7 @@ async def generate_material(request: GenerateMaterialRequest) -> GenerateMateria
         material_content = await materials_agent.ainvoke({
             "topic": request.topic,
             "user_level": user_level,
-            "retrieved_materials": f"Создайте {request.format} материал по теме '{request.topic}' длиной {request.length}",
+            "retrieved_materials": f"Создайте {request.format} материал по теме '{request.topic}' длиной {request.length}",  # noqa: E501
             "format": request.format,
         })
 
@@ -141,8 +138,7 @@ async def generate_material(request: GenerateMaterialRequest) -> GenerateMateria
 
 @router.post("/add-custom-topic")
 async def add_custom_topic(request: AddCustomTopicRequest) -> AddCustomTopicResponse:
-    """Добавить пользовательскую тему"""
-
+    """Добавить пользовательскую тему."""
     get_or_create_user(request.user_id)
     topic_id = f"custom_{uuid.uuid4()}"
 
@@ -176,8 +172,7 @@ async def add_custom_topic(request: AddCustomTopicRequest) -> AddCustomTopicResp
 
 @router.get("/topics")
 async def get_topics() -> GetTopicsResponse:
-    """Получить список доступных тем"""
-
+    """Получить список доступных тем."""
     predefined_topics = [
         "Временная сложность",
         "Пространственная сложность",
@@ -206,8 +201,7 @@ async def get_topics() -> GetTopicsResponse:
 
 @router.post("/search")
 async def search_materials(request: SearchMaterialsRequest) -> SearchMaterialsResponse:
-    """Поиск материалов"""
-
+    """Поиск материалов."""
     try:
         documents = vector_store_manager.similarity_search(
             query=request.query, k=10, filter_dict=request.filters

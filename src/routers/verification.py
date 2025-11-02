@@ -18,8 +18,7 @@ router = APIRouter(prefix="/api/v1/verification", tags=["Verification"])
 
 @router.post("/check-test")
 async def check_test(request: TestVerificationRequest) -> TestVerificationResponse:
-    """Проверка ответа с опциональной двойной верификацией"""
-
+    """Проверка ответа с опциональной двойной верификацией."""
     try:
         # Первичная проверка
         primary_agent = load_agent("verification", language=request.language)
@@ -105,8 +104,7 @@ async def check_test(request: TestVerificationRequest) -> TestVerificationRespon
 
 @router.get("/history/{user_id}")
 async def get_verification_history(user_id: str) -> GetVerificationHistoryResponse:
-    """Получить историю проверок пользователя"""
-
+    """Получить историю проверок пользователя."""
     with get_db_session() as session:
         verifications = (
             session.query(Verification)

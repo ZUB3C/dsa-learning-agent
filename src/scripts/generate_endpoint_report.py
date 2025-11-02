@@ -1,6 +1,4 @@
-"""
-Проверка API эндпоинтов с детализированными результатами и логированием.
-"""
+"""Проверка API эндпоинтов с детализированными результатами и логированием."""
 
 import asyncio
 import inspect
@@ -98,7 +96,7 @@ def format_json(data: Any) -> str:
         return str(data)
 
 
-async def test_health_endpoints() -> list[EndpointTestResult]:
+def test_health_endpoints() -> list[EndpointTestResult]:
     """Тестирование health эндпоинтов."""
     logger.info("=" * 80)
     logger.info("ТЕСТИРОВАНИЕ: System Health Endpoints")
@@ -154,7 +152,7 @@ async def test_assessment_endpoints() -> list[EndpointTestResult]:
     test_user_id = f"test_user_{uuid.uuid4().hex[:8]}"
 
     # POST /api/v1/assessment/start
-    logger.info(f"Тест: POST /api/v1/assessment/start для пользователя {test_user_id}")
+    logger.info("Тест: POST /api/v1/assessment/start для пользователя %s", test_user_id)
     start_time = asyncio.get_event_loop().time()
     try:
         request = AssessmentStartRequest(user_id=test_user_id)
@@ -178,7 +176,7 @@ async def test_assessment_endpoints() -> list[EndpointTestResult]:
             execution_time=execution_time,
         )
         logger.info(
-            f"✓ Успешно. Session ID: {session_id}. Вопросов: {len(result.test_questions)}. Время: {execution_time:.3f}s"
+            f"✓ Успешно. Session ID: {session_id}. Вопросов: {len(result.test_questions)}. Время: {execution_time:.3f}s"  # noqa: E501
         )
         results.append(test_result)
     except Exception as e:
@@ -199,7 +197,7 @@ async def test_assessment_endpoints() -> list[EndpointTestResult]:
 
     # POST /api/v1/assessment/submit (только если создана сессия)
     if session_id and results[-1].status == "success":
-        logger.info(f"Тест: POST /api/v1/assessment/submit для сессии {session_id}")
+        logger.info("Тест: POST /api/v1/assessment/submit для сессии %s", session_id)
         start_time = asyncio.get_event_loop().time()
         try:
             submit_request = AssessmentSubmitRequest(
@@ -242,7 +240,7 @@ async def test_assessment_endpoints() -> list[EndpointTestResult]:
         logger.warning("⚠ Пропуск submit теста - нет валидной сессии")
 
     # GET /api/v1/assessment/results/{user_id}
-    logger.info(f"Тест: GET /api/v1/assessment/results/{test_user_id}")
+    logger.info("Тест: GET /api/v1/assessment/results/%s", test_user_id)
     start_time = asyncio.get_event_loop().time()
     try:
         result = await assessment.get_assessment_results(test_user_id)
@@ -308,7 +306,8 @@ async def test_materials_endpoints() -> list[EndpointTestResult]:
             execution_time=execution_time,
         )
         logger.info(
-            f"✓ Успешно. Предопределенных тем: {len(result.predefined_topics)}, Пользовательских: {len(result.custom_topics)}. Время: {execution_time:.3f}s"
+            f"✓ Успешно. Предопределенных тем: {len(result.predefined_topics)}, "
+            f"Пользовательских: {len(result.custom_topics)}. Время: {execution_time:.3f}s"
         )
         results.append(test_result)
     except Exception as e:
@@ -438,7 +437,7 @@ async def test_materials_endpoints() -> list[EndpointTestResult]:
             execution_time=execution_time,
         )
         logger.info(
-            f"✓ Успешно. Материал сгенерирован. Topic ID: {generated_topic_id}. Время: {execution_time:.3f}s"
+            f"✓ Успешно. Материал сгенерирован. Topic ID: {generated_topic_id}. Время: {execution_time:.3f}s"  # noqa: E501
         )
         results.append(test_result)
     except Exception as e:
@@ -460,7 +459,7 @@ async def test_materials_endpoints() -> list[EndpointTestResult]:
     # if generated_topic_id and results[-1].status == "success":
     if True:
         generated_topic_id = "generated_cc8f0fe7-94b4-4400-afeb-925375abd36b"
-        logger.info(f"Тест: POST /api/v1/materials/ask-question для темы {generated_topic_id}")
+        logger.info("Тест: POST /api/v1/materials/ask-question для темы %s", generated_topic_id)
         start_time = asyncio.get_event_loop().time()
         try:
             request = AskQuestionRequest(
@@ -581,7 +580,7 @@ async def test_tests_endpoints() -> list[EndpointTestResult]:
             execution_time=execution_time,
         )
         logger.info(
-            f"✓ Успешно. Test ID: {test_id}. Вопросов: {len(result.questions)}. Время: {execution_time:.3f}s"
+            f"✓ Успешно. Test ID: {test_id}. Вопросов: {len(result.questions)}. Время: {execution_time:.3f}s"  # noqa: E501
         )
         results.append(test_result)
     except Exception as e:
@@ -627,7 +626,7 @@ async def test_tests_endpoints() -> list[EndpointTestResult]:
             execution_time=execution_time,
         )
         logger.info(
-            f"✓ Успешно. Task ID: {result.task.task_id}. Подсказок: {len(result.solution_hints)}. Время: {execution_time:.3f}s"
+            f"✓ Успешно. Task ID: {result.task.task_id}. Подсказок: {len(result.solution_hints)}. Время: {execution_time:.3f}s"  # noqa: E501
         )
         results.append(test_result)
     except Exception as e:
@@ -647,7 +646,7 @@ async def test_tests_endpoints() -> list[EndpointTestResult]:
 
     # GET /api/v1/tests/{test_id} (только если тест был создан)
     if test_id and results[0].status == "success":
-        logger.info(f"Тест: GET /api/v1/tests/{test_id}")
+        logger.info("Тест: GET /api/v1/tests/%s", test_id)
         start_time = asyncio.get_event_loop().time()
         try:
             result = await tests.get_test(test_id)
@@ -685,7 +684,7 @@ async def test_tests_endpoints() -> list[EndpointTestResult]:
 
         # POST /api/v1/tests/submit-for-verification (только если тест получен)
         if results[-1].status == "success":
-            logger.info(f"Тест: POST /api/v1/tests/submit-for-verification для теста {test_id}")
+            logger.info("Тест: POST /api/v1/tests/submit-for-verification для теста %s", test_id)
             start_time = asyncio.get_event_loop().time()
             try:
                 request = SubmitTestRequest(
@@ -706,7 +705,7 @@ async def test_tests_endpoints() -> list[EndpointTestResult]:
                     execution_time=execution_time,
                 )
                 logger.info(
-                    f"✓ Успешно. Verification ID: {result.verification_id}. Время: {execution_time:.3f}s"
+                    f"✓ Успешно. Verification ID: {result.verification_id}. Время: {execution_time:.3f}s"  # noqa: E501
                 )
                 results.append(test_result)
             except Exception as e:
@@ -729,7 +728,7 @@ async def test_tests_endpoints() -> list[EndpointTestResult]:
         logger.warning("⚠ Пропуск GET test и submit-for-verification тестов - тест не был создан")
 
     # GET /api/v1/tests/user/{user_id}/completed
-    logger.info(f"Тест: GET /api/v1/tests/user/{test_user_id}/completed")
+    logger.info("Тест: GET /api/v1/tests/user/%s/completed", test_user_id)
     start_time = asyncio.get_event_loop().time()
     try:
         result = await tests.get_completed_tests(test_user_id)
@@ -748,7 +747,7 @@ async def test_tests_endpoints() -> list[EndpointTestResult]:
             execution_time=execution_time,
         )
         logger.info(
-            f"✓ Успешно. Завершенных тестов: {len(result.completed_tests)}. Время: {execution_time:.3f}s"
+            f"✓ Успешно. Завершенных тестов: {len(result.completed_tests)}. Время: {execution_time:.3f}s"  # noqa: E501
         )
         results.append(test_result)
     except Exception as e:
@@ -785,7 +784,7 @@ async def test_verification_endpoints() -> list[EndpointTestResult]:
     try:
         request = TestVerificationRequest(
             test_id=str(uuid.uuid4()),
-            user_answer="В среднем случае временная сложность быстрой сортировки составляет O(n log n)",
+            user_answer="В среднем случае временная сложность быстрой сортировки составляет O(n log n)",  # noqa: E501
             language="ru",
             question="Какова временная сложность алгоритма быстрой сортировки в среднем случае?",
             expected_answer="O(n log n)",
@@ -803,7 +802,7 @@ async def test_verification_endpoints() -> list[EndpointTestResult]:
             execution_time=execution_time,
         )
         logger.info(
-            f"✓ Успешно. Оценка: {result.score}. Правильно: {result.is_correct}. Время: {execution_time:.3f}s"
+            f"✓ Успешно. Оценка: {result.score}. Правильно: {result.is_correct}. Время: {execution_time:.3f}s"  # noqa: E501
         )
         results.append(test_result)
     except Exception as e:
@@ -827,7 +826,7 @@ async def test_verification_endpoints() -> list[EndpointTestResult]:
     try:
         request2 = TestVerificationRequest(
             test_id=str(uuid.uuid4()),
-            user_answer="Бинарный поиск имеет сложность O(log n), потому что каждый раз делит массив пополам",
+            user_answer="Бинарный поиск имеет сложность O(log n), потому что каждый раз делит массив пополам",  # noqa: E501
             language="ru",
             question="Объясните временную сложность бинарного поиска",
             expected_answer="O(log n) - на каждом шаге поиск уменьшает область поиска вдвое",
@@ -845,7 +844,7 @@ async def test_verification_endpoints() -> list[EndpointTestResult]:
             execution_time=execution_time,
         )
         logger.info(
-            f"✓ Успешно. Оценка: {result2.score}. Правильно: {result2.is_correct}. Время: {execution_time:.3f}s"
+            f"✓ Успешно. Оценка: {result2.score}. Правильно: {result2.is_correct}. Время: {execution_time:.3f}s"  # noqa: E501
         )
         results.append(test_result)
     except Exception as e:
@@ -864,7 +863,7 @@ async def test_verification_endpoints() -> list[EndpointTestResult]:
         results.append(test_result)
 
     # GET /api/v1/verification/history/{user_id} (теперь должен найти данные)
-    logger.info(f"Тест: GET /api/v1/verification/history/{test_user_id}")
+    logger.info("Тест: GET /api/v1/verification/history/%s", test_user_id)
     start_time = asyncio.get_event_loop().time()
     try:
         result = await verification.get_verification_history(test_user_id)
@@ -873,7 +872,8 @@ async def test_verification_endpoints() -> list[EndpointTestResult]:
         # Проверяем, что данные найдены
         if len(result.tests) == 0:
             logger.warning(
-                f"⚠ История пуста для пользователя {test_user_id}. Возможно, check-test не сохраняет user_id."
+                "⚠ История пуста для пользователя %s. Возможно, check-test не сохраняет user_id.",
+                test_user_id,
             )
             test_result = EndpointTestResult(
                 endpoint="GET /api/v1/verification/history/{user_id}",
@@ -882,7 +882,7 @@ async def test_verification_endpoints() -> list[EndpointTestResult]:
                 input_data={"user_id": test_user_id},
                 output_data={
                     "tests_count": 0,
-                    "warning": "История пуста. Возможно, check-test не связывает данные с user_id.",
+                    "warning": "История пуста. Возможно, check-test не связывает данные с user_id.",  # noqa: E501
                 },
                 status="success",
                 error_message="Warning: No history found for user.",
@@ -911,7 +911,7 @@ async def test_verification_endpoints() -> list[EndpointTestResult]:
             )
 
         logger.info(
-            f"✓ Успешно. Проверок: {len(result.tests)}. Средний балл: {result.average_score:.2f}. Время: {execution_time:.3f}s"
+            f"✓ Успешно. Проверок: {len(result.tests)}. Средний балл: {result.average_score:.2f}. Время: {execution_time:.3f}s"  # noqa: E501
         )
         results.append(test_result)
     except Exception as e:
@@ -1042,7 +1042,7 @@ async def test_llm_router_endpoints() -> list[EndpointTestResult]:
             execution_time=execution_time,
         )
         logger.info(
-            f"✓ Успешно. Контент сгенерирован. Модель: {result.model_used}. Время: {execution_time:.3f}s"
+            f"✓ Успешно. Контент сгенерирован. Модель: {result.model_used}. Время: {execution_time:.3f}s"  # noqa: E501
         )
         results.append(test_result)
     except Exception as e:
@@ -1099,7 +1099,7 @@ async def test_support_endpoints() -> list[EndpointTestResult]:
             execution_time=execution_time,
         )
         logger.info(
-            f"✓ Успешно. Статей: {len(result.articles)}, Упражнений: {len(result.exercises)}. Время: {execution_time:.3f}s"
+            f"✓ Успешно. Статей: {len(result.articles)}, Упражнений: {len(result.exercises)}. Время: {execution_time:.3f}s"  # noqa: E501
         )
         results.append(test_result)
     except Exception as e:
@@ -1332,7 +1332,7 @@ async def main() -> None:
         all_results.extend(support_results)
 
     except Exception as e:
-        logger.exception(f"Критическая ошибка во время тестирования: {e}")
+        logger.exception("Критическая ошибка во время тестирования: %s", e)
 
     # Подсчет статистики
     total_time = asyncio.get_event_loop().time() - start_time

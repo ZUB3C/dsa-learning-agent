@@ -76,7 +76,7 @@ ASSESSMENT_QUESTIONS = [
     },
     {
         "question_id": 7,
-        "question_text": "Какая структура данных наиболее эффективна для поиска элемента по ключу за O(1) в среднем?",
+        "question_text": "Какая структура данных наиболее эффективна для поиска элемента по ключу за O(1) в среднем?",  # noqa: E501
         "options": ["Массив", "Связный список", "Хеш-таблица", "Двоичное дерево поиска"],
         "correct_answer": 2,
         "topic": "data_structures",
@@ -173,7 +173,7 @@ ASSESSMENT_QUESTIONS = [
     },
     {
         "question_id": 15,
-        "question_text": "Какой обход дерева посещает узлы в порядке: левое поддерево → корень → правое поддерево?",
+        "question_text": "Какой обход дерева посещает узлы в порядке: левое поддерево → корень → правое поддерево?",  # noqa: E501
         "options": [
             "Прямой обход (preorder)",
             "Центрированный обход (inorder)",
@@ -189,8 +189,7 @@ ASSESSMENT_QUESTIONS = [
 
 @router.post("/start")
 async def start_assessment(request: AssessmentStartRequest) -> AssessmentStartResponse:
-    """Начать первичное тестирование"""
-
+    """Начать первичное тестирование."""
     get_or_create_user(request.user_id)
 
     session_id: str = str(uuid.uuid4())
@@ -215,8 +214,7 @@ async def start_assessment(request: AssessmentStartRequest) -> AssessmentStartRe
 
 @router.post("/submit")
 async def submit_assessment(request: AssessmentSubmitRequest) -> AssessmentSubmitResponse:
-    """Отправить результаты тестирования"""
-
+    """Отправить результаты тестирования."""
     with get_db_session() as session:
         assessment_session = (
             session.query(AssessmentSession)
@@ -285,7 +283,7 @@ async def submit_assessment(request: AssessmentSubmitRequest) -> AssessmentSubmi
     else:
         recommendations.extend([
             "Переходите к продвинутым темам: динамическое программирование, жадные алгоритмы",
-            "Изучайте сложные структуры данных: B-деревья, префиксные деревья, системы непересекающихся множеств",
+            "Изучайте сложные структуры данных: B-деревья, префиксные деревья, системы непересекающихся множеств",  # noqa: E501
             "Решайте сложные задачи и участвуйте в соревнованиях по программированию",
             "Углубите понимание анализа алгоритмов и оптимизации",
         ])
@@ -322,8 +320,7 @@ async def submit_assessment(request: AssessmentSubmitRequest) -> AssessmentSubmi
 
 @router.get("/results/{user_id}")
 async def get_assessment_results(user_id: str) -> GetAssessmentResultsResponse:
-    """Получить результаты начальной оценки"""
-
+    """Получить результаты начальной оценки."""
     with get_db_session() as session:
         result = (
             session.query(Assessment)

@@ -2,6 +2,8 @@ import time
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import RequestResponseEndpoint
+from starlette.responses import Response
 
 from .core.database import init_database
 from .models.schemas import RootResponse
@@ -24,7 +26,7 @@ app.add_middleware(
 
 
 @app.middleware("http")
-async def latency_header(request: Request, call_next):  # noqa: ANN201
+async def latency_header(request: Request, call_next: RequestResponseEndpoint) -> Response:
     start = time.time()
     resp = await call_next(request)
     resp.headers["X-Process-Time"] = f"{time.time() - start:.3f}"
@@ -33,7 +35,7 @@ async def latency_header(request: Request, call_next):  # noqa: ANN201
 
 @app.on_event("startup")
 async def startup_event() -> None:  # noqa: RUF029
-    """Инициализация при запуске"""
+    """Инициализация при запуске."""
     init_database()
 
 
@@ -49,7 +51,7 @@ app.include_router(support.router)
 
 @app.get("/")
 def root() -> RootResponse:
-    """Root endpoint"""
+    """Root endpoint."""
     return RootResponse(message="DSA Learning Platform API", version="1.0.0", docs="/docs")
 
 

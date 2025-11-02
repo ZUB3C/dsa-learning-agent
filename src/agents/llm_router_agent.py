@@ -1,3 +1,4 @@
+import json
 from typing import Any, Literal
 
 from langchain_core.output_parsers import StrOutputParser
@@ -10,22 +11,21 @@ RequestType = Literal["material", "task", "test", "question", "support"]
 
 
 def build_router_agent(language: str = "ru") -> "LLMRouter":
-    """Создать агент-роутер для выбора подходящей LLM"""
+    """Создать агент-роутер для выбора подходящей LLM."""
     return LLMRouter(language=language)
 
 
 class LLMRouter:
-    """Роутер для выбора подходящей LLM в зависимости от языка и типа запроса"""
+    """Роутер для выбора подходящей LLM в зависимости от языка и типа запроса."""
 
     def __init__(self, language: str = "ru") -> None:
-        """Инициализация роутера с языком по умолчанию"""
+        """Инициализация роутера с языком по умолчанию."""
         self.default_language = language
 
     def select_llm(
         self, language: str | None = None, request_type: RequestType | None = None
     ) -> Runnable:
-        """Выбрать подходящую LLM"""
-
+        """Выбрать подходящую LLM."""
         lang = language or self.default_language
 
         # Определяем базовую модель по языку
@@ -42,14 +42,14 @@ class LLMRouter:
         return base_llm
 
     def get_model_name(self, language: str | None = None) -> str:
-        """Получить название используемой модели"""
+        """Получить название используемой модели."""
         lang = language or self.default_language
         if lang.lower() in {"ru", "russian", "русский"}:
             return "GigaChat"
         return "DeepSeek"
 
     async def ainvoke(self, inputs: dict[str, Any]) -> str:
-        """Совместимость с интерфейсом агентов LangChain"""
+        """Совместимость с интерфейсом агентов LangChain."""
         request_type = inputs.get("task_type", "material")
         language = inputs.get("language", self.default_language)
 
@@ -63,8 +63,6 @@ class LLMRouter:
             "alternative_models": [],
         }
 
-        import json
-
         return json.dumps(result, ensure_ascii=False)
 
     async def generate_content(
@@ -75,8 +73,7 @@ class LLMRouter:
         system_prompt: str = "",
         parameters: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Генерировать контент с помощью выбранной LLM"""
-
+        """Генерировать контент с помощью выбранной LLM."""
         lang = language or self.default_language
         llm = self.select_llm(lang, request_type)
 

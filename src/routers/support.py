@@ -18,8 +18,7 @@ router = APIRouter(prefix="/api/v1/support", tags=["Support"])
 
 @router.post("/get-support")
 async def get_support(request: SupportRequest) -> SupportResponse:
-    """Получить психологическую поддержку"""
-
+    """Получить психологическую поддержку."""
     try:
         get_or_create_user(request.user_id)
 
@@ -67,13 +66,12 @@ async def get_support(request: SupportRequest) -> SupportResponse:
 
 
 def _generate_default_recommendations(emotional_state: str) -> list[str]:
-    """Сгенерировать рекомендации по умолчанию"""
+    """Сгенерировать рекомендации по умолчанию."""
     return _get_recommendations_by_state(emotional_state)
 
 
 def _get_recommendations_by_state(emotional_state: str) -> list[str]:
-    """Получить рекомендации в зависимости от эмоционального состояния"""
-
+    """Получить рекомендации в зависимости от эмоционального состояния."""
     recommendations_map: dict[str, list[str]] = {
         "stressed": [
             "Делайте регулярные перерывы во время обучения (техника Помодоро)",
@@ -100,8 +98,7 @@ def _get_recommendations_by_state(emotional_state: str) -> list[str]:
 
 
 def _get_support_resources(language: str) -> list[dict[str, str]]:
-    """Получить ресурсы поддержки"""
-
+    """Получить ресурсы поддержки."""
     if language == "ru":
         return [
             {
@@ -131,8 +128,7 @@ def _get_support_resources(language: str) -> list[dict[str, str]]:
 
 @router.get("/resources")
 async def get_support_resources() -> GetSupportResourcesResponse:
-    """Получить ресурсы психологической поддержки"""
-
+    """Получить ресурсы психологической поддержки."""
     return GetSupportResourcesResponse(
         articles=[
             {"title": "Как справиться со стрессом при изучении алгоритмов", "url": "#"},
@@ -152,8 +148,7 @@ async def get_support_resources() -> GetSupportResourcesResponse:
 
 @router.post("/feedback")
 async def submit_feedback(request: SubmitFeedbackRequest) -> SubmitFeedbackResponse:
-    """Отправить обратную связь о сессии поддержки"""
-
+    """Отправить обратную связь о сессии поддержки."""
     with get_db_session() as session:
         support_session = (
             session.query(SupportSession)

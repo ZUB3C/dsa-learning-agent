@@ -1,6 +1,4 @@
-"""
-Скрипт для заполнения ChromaDB материалами из PDF
-"""
+"""Скрипт для заполнения ChromaDB материалами из PDF."""
 
 import argparse
 import sys

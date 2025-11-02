@@ -5,7 +5,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
 class SmartTextSplitter:
-    """Умный разделитель текста с учетом структуры LaTeX документов"""
+    """Умный разделитель текста с учетом структуры LaTeX документов."""
 
     def __init__(
         self, chunk_size: int = 1000, chunk_overlap: int = 200, separators: list[str] | None = None
@@ -33,8 +33,7 @@ class SmartTextSplitter:
     def split_section(
         self, section_data: dict, parent_hierarchy: list[str] | None = None
     ) -> list[Document]:
-        """Разделить раздел на чанки с метаданными"""
-
+        """Разделить раздел на чанки с метаданными."""
         content = section_data.get("content", "")
         title = section_data.get("title", "Untitled")
         level = section_data.get("level", 1)
@@ -75,8 +74,7 @@ class SmartTextSplitter:
 
     @staticmethod
     def _extract_concepts(text: str) -> list[str]:
-        """Извлечь ключевые концепции из текста"""
-
+        """Извлечь ключевые концепции из текста."""
         concepts = []
 
         # Паттерны для распространенных терминов АиСД

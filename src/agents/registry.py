@@ -21,12 +21,12 @@ _REGISTRY: dict[str, Callable[..., Any]] = {
 
 
 def list_agents() -> list[str]:
-    """Список доступных агентов"""
+    """Список доступных агентов."""
     return sorted(_REGISTRY.keys())
 
 
 def load_agent(name: str, **kwargs: Any) -> Any:
-    """Загрузить агент по имени"""
+    """Загрузить агент по имени."""
     if name not in _REGISTRY:
         raise ValueError(f"Unknown agent '{name}'. Available: {list_agents()}")
     return _REGISTRY[name](**kwargs)

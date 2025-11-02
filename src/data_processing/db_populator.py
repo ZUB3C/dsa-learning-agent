@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class DatabasePopulator:
-    """Класс для заполнения ChromaDB данными из PDF"""
+    """Класс для заполнения ChromaDB данными из PDF."""
 
     def __init__(
         self,
@@ -29,19 +29,16 @@ class DatabasePopulator:
         self.vector_store = vector_store_manager
         self.text_splitter = SmartTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 
-    def populate(self, clear_existing: bool = False) -> dict:
-        """Заполнить базу данных материалами из PDF"""
-
+    def populate(self, *, clear_existing: bool = False) -> dict:
+        """Заполнить базу данных материалами из PDF."""
         if clear_existing:
             logger.info("Очистка существующей коллекции...")
             try:
                 self.vector_store.delete_collection()
                 # Пересоздаем vector store после удаления
-                from ..core.vector_store import VectorStoreManager
-
                 self.vector_store = VectorStoreManager()
             except Exception as e:
-                logger.warning(f"Не удалось удалить коллекцию: {e}")
+                logger.warning("Не удалось удалить коллекцию: %s", e)
 
         logger.info(f"Начало обработки PDF: {self.pdf_path}")
 
@@ -96,7 +93,7 @@ class DatabasePopulator:
                 "document_ids": doc_ids,
             }
         except Exception as e:
-            logger.exception(f"Ошибка при добавлении документов: {e}")
+            logger.exception("Ошибка при добавлении документов: %s", e)
             return {
                 "status": "error",
                 "error": str(e),
@@ -104,9 +101,9 @@ class DatabasePopulator:
                 "total_documents": len(filtered_documents),
             }
 
-    def _build_hierarchy(self, sections: list[dict], current_index: int) -> list[str]:
-        """Построить иерархию для текущего раздела"""
-
+    @staticmethod
+    def _build_hierarchy(sections: list[dict], current_index: int) -> list[str]:
+        """Построить иерархию для текущего раздела."""
         current_section = sections[current_index]
         current_level = current_section["level"]
 
@@ -124,18 +121,19 @@ class DatabasePopulator:
         return hierarchy
 
     def get_statistics(self) -> dict:
-        """Получить статистику по базе данных"""
+        """Получить статистику по базе данных."""
         return self.vector_store.get_collection_info()
 
 
 def populate_from_pdf(
     pdf_path: str = "algobook.pdf",
-    clear_existing: bool = False,
     chunk_size: int = 1000,
     chunk_overlap: int = 200,
+    *,
+    clear_existing: bool = False,
 ) -> dict:
     """
-    Удобная функция для заполнения БД из PDF
+    Удобная функция для заполнения БД из PDF.
 
     Args:
         pdf_path: Путь к PDF файлу
@@ -145,8 +143,8 @@ def populate_from_pdf(
 
     Returns:
         Словарь со статистикой заполнения
-    """
 
+    """
     populator = DatabasePopulator(
         pdf_path=pdf_path,
         vector_store_manager=vector_store_manager,

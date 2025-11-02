@@ -8,7 +8,7 @@ from ..config import settings
 
 
 class VectorStoreManager:
-    """Менеджер для работы с ChromaDB"""
+    """Менеджер для работы с ChromaDB."""
 
     def __init__(self) -> None:
         self.embeddings = HuggingFaceEmbeddings(
@@ -27,8 +27,7 @@ class VectorStoreManager:
         )
 
     def add_documents(self, documents: list[Document]) -> list[str]:
-        """Добавить документы в векторное хранилище"""
-
+        """Добавить документы в векторное хранилище."""
         # Фильтруем сложные метаданные (списки, словари и т.д.)
         filtered_documents = []
         for doc in documents:
@@ -39,9 +38,9 @@ class VectorStoreManager:
 
         return self.vectorstore.add_documents(filtered_documents)
 
-    def _clean_metadata(self, metadata: dict) -> dict:
-        """Очистить метаданные от неподдерживаемых типов"""
-
+    @staticmethod
+    def _clean_metadata(metadata: dict) -> dict:
+        """Очистить метаданные от неподдерживаемых типов."""
         cleaned = {}
         for key, value in metadata.items():
             # Конвертируем списки в строки
@@ -62,15 +61,15 @@ class VectorStoreManager:
     def similarity_search(
         self, query: str, k: int = settings.rag_top_k, filter_dict: dict | None = None
     ) -> list[Document]:
-        """Поиск похожих документов"""
+        """Поиск похожих документов."""
         return self.vectorstore.similarity_search(query=query, k=k, filter=filter_dict)
 
     def delete_collection(self) -> None:
-        """Удалить коллекцию"""
+        """Удалить коллекцию."""
         self.client.delete_collection(settings.chroma_collection_name)
 
     def get_collection_info(self) -> dict:
-        """Получить информацию о коллекции"""
+        """Получить информацию о коллекции."""
         try:
             collection = self.client.get_collection(settings.chroma_collection_name)
             return {
@@ -82,12 +81,13 @@ class VectorStoreManager:
             return {"error": str(e), "count": 0}
 
     def collection_exists(self) -> bool:
-        """Проверить существование коллекции"""
+        """Проверить существование коллекции."""
         try:
             self.client.get_collection(settings.chroma_collection_name)
-            return True
         except Exception:
             return False
+        else:
+            return True
 
 
 # Глобальный экземпляр

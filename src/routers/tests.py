@@ -26,8 +26,7 @@ router = APIRouter(prefix="/api/v1/tests", tags=["Tests"])
 
 @router.post("/generate")
 async def generate_test(request: GenerateTestRequest) -> GenerateTestResponse:
-    """Сгенерировать тест по теме"""
-
+    """Сгенерировать тест по теме."""
     try:
         # Создаем роутер для определения модели
         router_instance = LLMRouter(language=request.language)
@@ -84,8 +83,7 @@ async def generate_test(request: GenerateTestRequest) -> GenerateTestResponse:
 
 @router.post("/generate-task")
 async def generate_task(request: GenerateTaskRequest) -> GenerateTaskResponse:
-    """Сгенерировать задачу"""
-
+    """Сгенерировать задачу."""
     try:
         # Создаем роутер напрямую для определения модели
         router_instance = LLMRouter(language=request.language)
@@ -139,15 +137,14 @@ async def generate_task(request: GenerateTaskRequest) -> GenerateTaskResponse:
                     task=task, solution_hints=hints, model_used=selected_model
                 )
 
-            msg = "No questions generated"
-            raise ValueError(msg)
+            raise HTTPException(status_code=500, detail=f"No questions generated {request=}")
 
         except (json.JSONDecodeError, ValueError):
             # Fallback: создаем простую задачу
             return GenerateTaskResponse(
                 task=Task(
                     task_id=f"task_{hash(request.topic + request.difficulty)}",
-                    description=f"Решите задачу по теме '{request.topic}' уровня сложности '{request.difficulty}'",
+                    description=f"Решите задачу по теме '{request.topic}' уровня сложности '{request.difficulty}'",  # noqa: E501
                     topic=request.topic,
                     difficulty=request.difficulty,
                     task_type=request.task_type,
@@ -165,8 +162,7 @@ async def generate_task(request: GenerateTaskRequest) -> GenerateTaskResponse:
 
 @router.post("/submit-for-verification")
 async def submit_test_for_verification(request: SubmitTestRequest) -> SubmitTestResponse:
-    """Отправить тест на проверку"""
-
+    """Отправить тест на проверку."""
     get_or_create_user(request.user_id)
 
     verification_id = str(uuid.uuid4())
@@ -182,8 +178,7 @@ async def submit_test_for_verification(request: SubmitTestRequest) -> SubmitTest
 
 @router.get("/{test_id}")
 async def get_test(test_id: str) -> GetTestResponse:
-    """Получить тест по ID"""
-
+    """Получить тест по ID."""
     with get_db_session() as session:
         test = session.query(Test).filter(Test.test_id == test_id).first()
 
@@ -204,8 +199,7 @@ async def get_test(test_id: str) -> GetTestResponse:
 
 @router.get("/user/{user_id}/completed")
 async def get_completed_tests(user_id: str) -> GetCompletedTestsResponse:
-    """Получить завершенные тесты пользователя"""
-
+    """Получить завершенные тесты пользователя."""
     with get_db_session() as session:
         results = (
             session.query(TestResult, Test)

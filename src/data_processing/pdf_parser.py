@@ -6,7 +6,7 @@ import pymupdf  # PyMuPDF
 
 
 class PDFParser:
-    """Парсер для PDF документов, скомпилированных из LaTeX"""
+    """Парсер для PDF документов, скомпилированных из LaTeX."""
 
     def __init__(self, pdf_path: str | Path) -> None:
         self.pdf_path = Path(pdf_path)
@@ -17,8 +17,7 @@ class PDFParser:
         self.toc: list[tuple[int, str, int]] = []  # (level, title, page)
 
     def extract_toc(self) -> list[dict[str, any]]:
-        """Извлечь оглавление из PDF"""
-
+        """Извлечь оглавление из PDF."""
         # Попытка получить TOC из метаданных PDF
         raw_toc = self.doc.get_toc()
 
@@ -42,8 +41,7 @@ class PDFParser:
         return structured_toc
 
     def _extract_toc_manually(self) -> list[tuple[int, str, int]]:
-        """Извлечь оглавление вручную из первых страниц"""
-
+        """Извлечь оглавление вручную из первых страниц."""
         toc = []
         # Обычно оглавление на первых 5-10 страницах
         toc_pages = min(10, len(self.doc))
@@ -71,7 +69,7 @@ class PDFParser:
                 # Паттерн для разделов (уровень 2)
                 section_match = re.match(r"^(\d+)\.(\d+)[\.\s]+(.*?)\s+\.{2,}\s*(\d+)", line)
                 if section_match:
-                    title = f"{section_match.group(1)}.{section_match.group(2)} {section_match.group(3).strip()}"
+                    title = f"{section_match.group(1)}.{section_match.group(2)} {section_match.group(3).strip()}"  # noqa: E501
                     page = int(section_match.group(4))
                     toc.append((2, title, page))
                     continue
@@ -93,21 +91,19 @@ class PDFParser:
 
     @staticmethod
     def _classify_heading(level: int, title: str) -> str:
-        """Классифицировать тип заголовка"""
-
+        """Классифицировать тип заголовка."""
         title_lower = title.lower()
 
         if "лекция" in title_lower or level == 1:
             return "lecture"
-        if level == 2 or re.match(r"^\d+\.", title):  # noqa: PLR2004
+        if level == 2 or re.match(r"^\d+\.", title):
             return "section"
-        if level >= 3:  # noqa: PLR2004
+        if level >= 3:
             return "subsection"
         return "unknown"
 
     def extract_content_by_toc(self) -> list[dict[str, any]]:
-        """Извлечь содержимое по разделам из оглавления"""
-
+        """Извлечь содержимое по разделам из оглавления."""
         if not self.toc:
             self.extract_toc()
 
@@ -141,8 +137,7 @@ class PDFParser:
         return sections_content
 
     def _extract_text_from_pages(self, start_page: int, end_page: int) -> str:
-        """Извлечь текст со страниц"""
-
+        """Извлечь текст со страниц."""
         text_parts = []
 
         for page_num in range(start_page, min(end_page, len(self.doc))):
@@ -157,8 +152,7 @@ class PDFParser:
 
     @staticmethod
     def _clean_text(text: str) -> str:
-        """Очистить текст от артефактов"""
-
+        """Очистить текст от артефактов."""
         # Удаляем множественные пробелы
         text = re.sub(r"\s+", " ", text)
 
@@ -171,7 +165,7 @@ class PDFParser:
         return text.strip()
 
     def close(self) -> None:
-        """Закрыть PDF документ"""
+        """Закрыть PDF документ."""
         if self.doc:
             self.doc.close()
 

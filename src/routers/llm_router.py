@@ -19,8 +19,7 @@ router = APIRouter(prefix="/api/v1/llm-router", tags=["LLM Router"])
 
 @router.post("/select-and-generate")
 async def select_and_generate(request: LLMRouterRequest) -> LLMRouterResponse:
-    """Выбрать подходящую модель и сгенерировать контент"""
-
+    """Выбрать подходящую модель и сгенерировать контент."""
     try:
         # Создаем роутер для выбора модели
         router_agent = LLMRouter(language=request.language)

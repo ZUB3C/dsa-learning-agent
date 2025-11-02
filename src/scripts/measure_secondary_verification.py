@@ -11,13 +11,14 @@ from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 
+import aiofiles
 from pydantic import BaseModel, Field
 
 from src.agents.registry import load_agent
 
 
 class DifficultyLevel(StrEnum):
-    """Уровень сложности вопроса"""
+    """Уровень сложности вопроса."""
 
     EASY = "easy"
     MEDIUM = "medium"
@@ -96,7 +97,7 @@ class EffectivenessReport(BaseModel):
 
 
 def metrics_to_markdown_table(metrics: VerificationMetrics) -> str:
-    """Конвертировать метрики в markdown таблицу"""
+    """Конвертировать метрики в markdown таблицу."""
     return f"""
 | Метрика | Значение |
 |---------|----------|
@@ -109,8 +110,7 @@ def metrics_to_markdown_table(metrics: VerificationMetrics) -> str:
 
 
 def generate_markdown_report(report: EffectivenessReport) -> str:
-    """Генерировать полный отчет в формате Markdown"""
-
+    """Генерировать полный отчет в формате Markdown."""
     md_lines = []
 
     # Заголовок
@@ -184,13 +184,14 @@ def generate_markdown_report(report: EffectivenessReport) -> str:
         md_lines.append("✅ **Совпадение правильности ВЫСОКОЕ** (80-89%)")
     else:
         md_lines.append("⚠️ **Совпадение правильности требует внимания** (< 80%)")
-    md_lines.append("")
 
     # Детальные верификации
-    md_lines.append("## 📋 Детальные результаты верификаций")
-    md_lines.append("")
-    md_lines.append("| Q ID | Тема | Сложность | Первичная | Вторичная | Согласие |")
-    md_lines.append("|------|------|-----------|-----------|-----------|----------|")
+    md_lines.extend([
+        "## 📋 Детальные результаты верификаций",
+        "",
+        "| Q ID | Тема | Сложность | Первичная | Вторичная | Согласие |",
+        "|------|------|-----------|-----------|-----------|----------|",
+    ])
 
     for verif in report.verifications[:20]:  # Показываем первые 20
         agreement_mark = "✅" if verif.secondary_evaluation.agree_with_primary else "❌"
@@ -216,7 +217,7 @@ def generate_markdown_report(report: EffectivenessReport) -> str:
 
 
 def load_test_collection_from_file(file_path: str) -> TestCollection:
-    """Загрузить тестовую сборку из JSON файла"""
+    """Загрузить тестовую сборку из JSON файла."""
     with Path(file_path).open(encoding="utf-8") as f:
         data = json.load(f)
 
@@ -242,8 +243,7 @@ def load_test_collection_from_file(file_path: str) -> TestCollection:
 async def verify_answer(
     question: Question, language: str = "ru"
 ) -> tuple[PrimaryEvaluation, SecondaryEvaluation]:
-    """Получить первичную и вторичную оценку от LLM"""
-
+    """Получить первичную и вторичную оценку от LLM."""
     try:
         primary_agent = load_agent("verification", language=language)
         primary_result = await primary_agent.ainvoke({
@@ -278,8 +278,6 @@ async def verify_answer(
                 verification_notes="Прошла проверка согласованности",
             )
 
-        return primary_eval, secondary_eval
-
     except Exception as e:
         print(f"⚠️  Ошибка при верификации вопроса {question.question_id}: {e}")
         return (
@@ -291,12 +289,14 @@ async def verify_answer(
                 verification_notes="Произошла ошибка",
             ),
         )
+    else:
+        return primary_eval, secondary_eval
 
 
 async def process_verifications(
     test_collection: TestCollection, language: str = "ru"
 ) -> list[TestVerification]:
-    """Обработать все верификации"""
+    """Обработать все верификации."""
     verifications = []
     total = test_collection.total_questions
     processed = 0
@@ -305,7 +305,7 @@ async def process_verifications(
         for question in topic.questions:
             processed += 1
             print(
-                f"  [{processed}/{total}] Проверка вопроса {question.question_id} ({topic.topic_name})"
+                f"  [{processed}/{total}] Проверка вопроса {question.question_id} ({topic.topic_name})"  # noqa: E501
             )
 
             primary_eval, secondary_eval = await verify_answer(question, language)
@@ -325,7 +325,7 @@ async def process_verifications(
 
 
 def calculate_metrics(verifications: list[TestVerification]) -> VerificationMetrics:
-    """Рассчитать метрики"""
+    """Рассчитать метрики."""
     if not verifications:
         return VerificationMetrics(
             total_verifications=0,
@@ -363,8 +363,7 @@ def calculate_metrics(verifications: list[TestVerification]) -> VerificationMetr
 
 
 def generate_report(verifications: list[TestVerification]) -> EffectivenessReport:
-    """Генерировать полный отчет"""
-
+    """Генерировать полный отчет."""
     overall_metrics = calculate_metrics(verifications)
 
     # По сложности
@@ -401,8 +400,7 @@ def generate_report(verifications: list[TestVerification]) -> EffectivenessRepor
 
 
 async def main(args: argparse.Namespace) -> None:
-    """Главная функция"""
-
+    """Главная функция."""
     print("🚀 Запуск анализа эффективности вторичной проверки\n")
 
     # Загрузка данных
@@ -441,15 +439,15 @@ async def main(args: argparse.Namespace) -> None:
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with Path(output_path).open("w", encoding="utf-8") as f:
-            f.write(markdown_report)
+        async with aiofiles.open(output_path) as f:
+            await f.write(markdown_report)
 
         print(f"\n📄 Отчет сохранен в: {output_path}")
         print(f"📏 Размер отчета: {len(markdown_report)} байт")
 
 
 def main_sync(args: argparse.Namespace) -> None:
-    """Синхронный вход для asyncio"""
+    """Синхронный вход для asyncio."""
     asyncio.run(main(args))
 
 

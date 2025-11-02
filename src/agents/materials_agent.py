@@ -37,8 +37,7 @@ QUESTION_SYSTEM_PROMPT = """Ты - преподаватель по алгори�
 
 
 def build_materials_agent(language: str = "ru") -> Runnable:
-    """Агент для подбора и адаптации материалов"""
-
+    """Агент для подбора и адаптации материалов."""
     llm = get_llm_by_language(language)
 
     prompt = ChatPromptTemplate.from_messages([
@@ -50,8 +49,7 @@ def build_materials_agent(language: str = "ru") -> Runnable:
 
 
 def build_question_answering_agent(language: str = "ru") -> Runnable:
-    """Агент для ответов на вопросы по материалам"""
-
+    """Агент для ответов на вопросы по материалам."""
     llm = get_llm_by_language(language)
 
     prompt = ChatPromptTemplate.from_messages([
@@ -63,8 +61,7 @@ def build_question_answering_agent(language: str = "ru") -> Runnable:
 
 
 def retrieve_materials(topic: str, user_level: str) -> list[Document]:
-    """Получить материалы из RAG по теме"""
-
+    """Получить материалы из RAG по теме."""
     # Формируем запрос с учетом темы и уровня
     query = f"Тема: {topic}. Уровень: {user_level}"
 
@@ -75,8 +72,7 @@ def retrieve_materials(topic: str, user_level: str) -> list[Document]:
 
 
 def format_retrieved_materials(documents: list[Document]) -> str:
-    """Форматировать полученные документы для промпта"""
-
+    """Форматировать полученные документы для промпта."""
     if not documents:
         return "Материалы не найдены в базе знаний."
 
