@@ -212,9 +212,7 @@ async def search_materials(request: SearchMaterialsRequest) -> SearchMaterialsRe
             for doc in documents
         ]
 
-        relevance_scores = [1.0 / (i + 1) for i in range(len(results))]
-
-        return SearchMaterialsResponse(results=results, relevance_scores=relevance_scores)
+        return SearchMaterialsResponse(results=results)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search error: {e!s}")

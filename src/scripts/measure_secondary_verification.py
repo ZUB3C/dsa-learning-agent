@@ -1,43 +1,29 @@
-"""
-Скрипт для измерения метрики эффективности вторичной проверки ответов вторым LLM.
-Генерирует отчет в формате Markdown.
-"""
-
 import argparse
 import asyncio
 import json
 import sys
 from datetime import datetime
-from enum import StrEnum
 from pathlib import Path
 
-import aiofiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from src.agents.registry import load_agent
 
 
-class DifficultyLevel(StrEnum):
-    """Уровень сложности вопроса."""
-
-    EASY = "easy"
-    MEDIUM = "medium"
-    HARD = "hard"
-
-
 class Question(BaseModel):
-    question_id: int = Field(..., description="ID вопроса")
-    difficulty: DifficultyLevel = Field(..., description="Сложность")
-    question_text: str = Field(..., description="Текст вопроса")
-    expected_answer: str = Field(..., description="Эталонный ответ")
+    question_id: int
+    difficulty: str
+    question_text: str
+    expected_answer: str
     user_answer: str
-    key_points: list[str] = Field(..., description="Ключевые моменты")
+    key_points: list[str]
+    is_correct: bool  # Ground truth
 
 
 class Topic(BaseModel):
-    topic_id: str = Field(..., description="ID темы")
-    topic_name: str = Field(..., description="Название темы")
-    questions: list[Question] = Field(..., description="Вопросы")
+    topic_id: str
+    topic_name: str
+    questions: list[Question]
 
 
 class TestCollection(BaseModel):
@@ -48,22 +34,22 @@ class TestCollection(BaseModel):
 
 
 class PrimaryEvaluation(BaseModel):
-    score: float = Field(..., ge=0, le=100)
     is_correct: bool
     feedback: str
 
 
 class SecondaryEvaluation(BaseModel):
     agree_with_primary: bool
-    final_score: float = Field(..., ge=0, le=100)
-    final_feedback: str
+    is_correct: bool
+    feedback: str
     verification_notes: str | None = None
 
 
 class TestVerification(BaseModel):
     question_id: int
     topic: str
-    difficulty: DifficultyLevel
+    difficulty: str
+    ground_truth: bool
     primary_evaluation: PrimaryEvaluation
     secondary_evaluation: SecondaryEvaluation
     timestamp: str
@@ -73,152 +59,145 @@ class VerificationMetrics(BaseModel):
     total_verifications: int
     agreement_count: int
     disagreement_count: int
-    agreement_rate: float = Field(..., ge=0, le=100)
-    average_score_difference: float
-    correctness_match_rate: float = Field(..., ge=0, le=100)
-
-
-class DifficultyMetrics(BaseModel):
-    difficulty: DifficultyLevel
-    metrics: VerificationMetrics
-
-
-class TopicMetrics(BaseModel):
-    topic: str
-    metrics: VerificationMetrics
+    agreement_rate: float
+    # Метрики точности
+    primary_accuracy: float
+    secondary_accuracy: float
+    improvement_rate: float
 
 
 class EffectivenessReport(BaseModel):
     report_date: str
     overall_metrics: VerificationMetrics
-    by_difficulty: list[DifficultyMetrics]
-    by_topic: list[TopicMetrics]
     verifications: list[TestVerification]
 
 
-def metrics_to_markdown_table(metrics: VerificationMetrics) -> str:
-    """Конвертировать метрики в markdown таблицу."""
-    return f"""
-| Метрика | Значение |
-|---------|----------|
-| Всего верификаций | {metrics.total_verifications} |
-| Согласия | {metrics.agreement_count} ({metrics.agreement_rate:.1f}%) |
-| Несогласия | {metrics.disagreement_count} ({100 - metrics.agreement_rate:.1f}%) |
-| Средняя разница оценок | {metrics.average_score_difference:.2f} пунктов |
-| Совпадение правильности | {metrics.correctness_match_rate:.1f}% |
-"""
+async def verify_answer(
+    question: Question, language: str = "ru"
+) -> tuple[PrimaryEvaluation, SecondaryEvaluation]:
+    """Проверяет ответ без передачи is_correct"""
+    try:
+        # Первичная проверка
+        primary_agent = load_agent("verification", language=language)
+        primary_result = await primary_agent.ainvoke({
+            "question": question.question_text,
+            "expected_answer": question.expected_answer,
+            "user_answer": question.user_answer,
+        })
 
+        try:
+            primary_eval_dict = json.loads(primary_result)
+            primary_eval = PrimaryEvaluation(**primary_eval_dict)
+        except (json.JSONDecodeError, ValueError):
+            primary_eval = PrimaryEvaluation(is_correct=False, feedback="Ошибка парсинга")
 
-def generate_markdown_report(report: EffectivenessReport) -> str:
-    """Генерировать полный отчет в формате Markdown."""
-    md_lines = []
+        # Вторичная проверка
+        secondary_agent = load_agent("verification-secondary", language=language)
+        secondary_result = await secondary_agent.ainvoke({
+            "primary_evaluation": json.dumps(primary_eval.model_dump(), ensure_ascii=False),
+            "question": question.question_text,
+            "user_answer": question.user_answer,
+        })
 
-    # Заголовок
-    md_lines.append("# 📊 Отчет об эффективности вторичной проверки LLM")
-    md_lines.append("")
-    md_lines.append(f"**Дата отчета:** {report.report_date}")
-    md_lines.append("")
+        try:
+            secondary_eval_dict = json.loads(secondary_result)
+            secondary_eval = SecondaryEvaluation(**secondary_eval_dict)
+        except (json.JSONDecodeError, ValueError):
+            secondary_eval = SecondaryEvaluation(
+                agree_with_primary=True,
+                is_correct=primary_eval.is_correct,
+                feedback=primary_eval.feedback,
+                verification_notes="Ошибка парсинга",
+            )
 
-    # Общие метрики
-    md_lines.append("## Общие метрики")
-    md_lines.append("")
-    md_lines.append(metrics_to_markdown_table(report.overall_metrics))
-    md_lines.append("")
+        return primary_eval, secondary_eval
 
-    # По сложности
-    md_lines.append("## Метрики по уровню сложности")
-    md_lines.append("")
-    md_lines.append("| Сложность | Верификаций | Согласие | Средняя разница |")
-    md_lines.append("|-----------|-------------|---------|-----------------|")
-    md_lines.extend(
-        f"| {diff_metric.difficulty.value.upper()} | "
-        f"{diff_metric.metrics.total_verifications} | "
-        f"{diff_metric.metrics.agreement_rate:.1f}% | "
-        f"{diff_metric.metrics.average_score_difference:.2f} |"
-        for diff_metric in report.by_difficulty
-    )
-    md_lines.append("")
-
-    # По темам
-    md_lines.append("## Метрики по темам")
-    md_lines.append("")
-    md_lines.append("| Тема | Верификаций | Согласие | Совпадение правильности |")
-    md_lines.append("|------|-------------|---------|-------------------------|")
-    md_lines.extend(
-        f"| {topic_metric.topic} | "
-        f"{topic_metric.metrics.total_verifications} | "
-        f"{topic_metric.metrics.agreement_rate:.1f}% | "
-        f"{topic_metric.metrics.correctness_match_rate:.1f}% |"
-        for topic_metric in report.by_topic
-    )
-    md_lines.append("")
-
-    # Выводы
-    md_lines.append("## 💡 Выводы и рекомендации")
-    md_lines.append("")
-
-    # Уровень согласия
-    if report.overall_metrics.agreement_rate >= 85:
-        md_lines.append("✅ **Вторичная проверка ВЫСОКОЭФФЕКТИВНА** (>= 85% согласия)")
-    elif report.overall_metrics.agreement_rate >= 70:
-        md_lines.append("⚠️ **Вторичная проверка ХОРОШО работает** (70-84% согласия)")
-    elif report.overall_metrics.agreement_rate >= 50:
-        md_lines.append("⚠️ **Вторичная проверка УМЕРЕННА** (50-69% согласия)")
-    else:
-        md_lines.append("❌ **Вторичная проверка НЕ СОГЛАСОВАНА** (< 50% согласия)")
-    md_lines.append("")
-
-    # Консистентность оценок
-    if report.overall_metrics.average_score_difference <= 3:
-        md_lines.append("✅ **Оценки КОНСИСТЕНТНЫ** между проверками (разница <= 3)")
-    elif report.overall_metrics.average_score_difference <= 10:
-        md_lines.append("⚠️ **Оценки имеют ДОПУСТИМЫЕ расхождения** (3-10)")
-    else:
-        md_lines.append("❌ **Оценки имеют ЗНАЧИТЕЛЬНЫЕ расхождения** (> 10)")
-    md_lines.append("")
-
-    # Совпадение правильности
-    if report.overall_metrics.correctness_match_rate >= 90:
-        md_lines.append("✅ **Совпадение правильности ОЧЕНЬ ВЫСОКОЕ** (>= 90%)")
-    elif report.overall_metrics.correctness_match_rate >= 80:
-        md_lines.append("✅ **Совпадение правильности ВЫСОКОЕ** (80-89%)")
-    else:
-        md_lines.append("⚠️ **Совпадение правильности требует внимания** (< 80%)")
-
-    # Детальные верификации
-    md_lines.extend([
-        "## 📋 Детальные результаты верификаций",
-        "",
-        "| Q ID | Тема | Сложность | Первичная | Вторичная | Согласие |",
-        "|------|------|-----------|-----------|-----------|----------|",
-    ])
-
-    for verif in report.verifications[:20]:  # Показываем первые 20
-        agreement_mark = "✅" if verif.secondary_evaluation.agree_with_primary else "❌"
-        md_lines.append(
-            f"| {verif.question_id} | {verif.topic} | {verif.difficulty.value} | "
-            f"{verif.primary_evaluation.score:.0f} | "
-            f"{verif.secondary_evaluation.final_score:.0f} | "
-            f"{agreement_mark} |"
+    except Exception as e:
+        print(f"Ошибка в вопросе {question.question_id}: {e}")
+        return (
+            PrimaryEvaluation(is_correct=False, feedback="Ошибка"),
+            SecondaryEvaluation(
+                agree_with_primary=False,
+                is_correct=False,
+                feedback="Ошибка",
+                verification_notes=str(e),
+            ),
         )
 
-    if len(report.verifications) > 20:
-        md_lines.append(
-            f"| ... | ... | ... | ... | ... | ... | *(всего {len(report.verifications)})*"
+
+async def process_verifications(
+    test_collection: TestCollection, language: str = "ru"
+) -> list[TestVerification]:
+    """Обрабатывает все вопросы"""
+    verifications = []
+    total = test_collection.total_questions
+    processed = 0
+
+    for topic in test_collection.topics:
+        for question in topic.questions:
+            processed += 1
+            print(f"[{processed}/{total}] Вопрос {question.question_id}: {topic.topic_name}")
+
+            primary_eval, secondary_eval = await verify_answer(question, language)
+
+            verification = TestVerification(
+                question_id=question.question_id,
+                topic=topic.topic_name,
+                difficulty=question.difficulty,
+                ground_truth=question.is_correct,
+                primary_evaluation=primary_eval,
+                secondary_evaluation=secondary_eval,
+                timestamp=datetime.now().isoformat(),
+            )
+
+            verifications.append(verification)
+
+    return verifications
+
+
+def calculate_metrics(verifications: list[TestVerification]) -> VerificationMetrics:
+    """Вычисляет метрики без использования баллов"""
+    if not verifications:
+        return VerificationMetrics(
+            total_verifications=0,
+            agreement_count=0,
+            disagreement_count=0,
+            agreement_rate=0.0,
+            primary_accuracy=0.0,
+            secondary_accuracy=0.0,
+            improvement_rate=0.0,
         )
 
-    md_lines.extend((
-        "",
-        "---",
-        f"*Отчет сгенерирован: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*",
-    ))
+    total = len(verifications)
+    agreements = sum(1 for v in verifications if v.secondary_evaluation.agree_with_primary)
+    disagreements = total - agreements
 
-    return "\n".join(md_lines)
+    # Точность проверок относительно ground truth
+    primary_correct = sum(
+        1 for v in verifications if v.primary_evaluation.is_correct == v.ground_truth
+    )
+    secondary_correct = sum(
+        1 for v in verifications if v.secondary_evaluation.is_correct == v.ground_truth
+    )
+
+    primary_accuracy = (primary_correct / total) * 100 if total > 0 else 0
+    secondary_accuracy = (secondary_correct / total) * 100 if total > 0 else 0
+    improvement_rate = secondary_accuracy - primary_accuracy
+
+    return VerificationMetrics(
+        total_verifications=total,
+        agreement_count=agreements,
+        disagreement_count=disagreements,
+        agreement_rate=(agreements / total * 100) if total > 0 else 0,
+        primary_accuracy=primary_accuracy,
+        secondary_accuracy=secondary_accuracy,
+        improvement_rate=improvement_rate,
+    )
 
 
-def load_test_collection_from_file(file_path: str) -> TestCollection:
-    """Загрузить тестовую сборку из JSON файла."""
-    with Path(file_path).open(encoding="utf-8") as f:
+def load_test_collection_from_file(filepath: str) -> TestCollection:
+    """Загружает тестовую коллекцию"""
+    with Path(filepath).open(encoding="utf-8") as f:
         data = json.load(f)
 
     topics = []
@@ -240,243 +219,125 @@ def load_test_collection_from_file(file_path: str) -> TestCollection:
     )
 
 
-async def verify_answer(
-    question: Question, language: str = "ru"
-) -> tuple[PrimaryEvaluation, SecondaryEvaluation]:
-    """Получить первичную и вторичную оценку от LLM."""
-    try:
-        primary_agent = load_agent("verification", language=language)
-        primary_result = await primary_agent.ainvoke({
-            "question": question.question_text,
-            "expected_answer": question.expected_answer,
-            "user_answer": question.expected_answer,
-        })
+def generate_markdown_report(report: EffectivenessReport) -> str:
+    """Генерирует Markdown отчет с таблицей результатов"""
+    md_lines = [
+        "# Отчет об эффективности вторичной верификации",
+        f"\n**Дата:** {report.report_date}",
+        "\n## Общая статистика\n",
+        f"- **Всего проверок:** {report.overall_metrics.total_verifications}",
+        f"- **Согласие проверок:** {report.overall_metrics.agreement_count} ({report.overall_metrics.agreement_rate:.1f}%)",
+        f"- **Расхождения:** {report.overall_metrics.disagreement_count} ({100 - report.overall_metrics.agreement_rate:.1f}%)",
+        "\n### 🎯 Точность относительно эталона\n",
+        f"- **Точность первичной проверки:** {report.overall_metrics.primary_accuracy:.1f}%",
+        f"- **Точность вторичной проверки:** {report.overall_metrics.secondary_accuracy:.1f}%",
+        f"- **Улучшение от вторичной проверки:** {report.overall_metrics.improvement_rate:+.1f}%",
+    ]
 
-        try:
-            primary_eval_dict = json.loads(primary_result)
-            primary_eval = PrimaryEvaluation(**primary_eval_dict)
-        except (json.JSONDecodeError, ValueError):
-            primary_eval = PrimaryEvaluation(
-                score=75.0, is_correct=True, feedback="Ответ соответствует эталону"
-            )
-
-        secondary_agent = load_agent("verification-secondary", language=language)
-        secondary_result = await secondary_agent.ainvoke({
-            "primary_evaluation": json.dumps(primary_eval.model_dump(), ensure_ascii=False),
-            "question": question.question_text,
-            "user_answer": question.expected_answer,
-        })
-
-        try:
-            secondary_eval_dict = json.loads(secondary_result)
-            secondary_eval = SecondaryEvaluation(**secondary_eval_dict)
-        except (json.JSONDecodeError, ValueError):
-            secondary_eval = SecondaryEvaluation(
-                agree_with_primary=True,
-                final_score=75.0,
-                final_feedback="Вторичная проверка подтвердила оценку",
-                verification_notes="Прошла проверка согласованности",
-            )
-
-    except Exception as e:
-        print(f"⚠️  Ошибка при верификации вопроса {question.question_id}: {e}")
-        return (
-            PrimaryEvaluation(score=50.0, is_correct=False, feedback="Ошибка проверки"),
-            SecondaryEvaluation(
-                agree_with_primary=False,
-                final_score=50.0,
-                final_feedback="Ошибка при вторичной проверке",
-                verification_notes="Произошла ошибка",
-            ),
+    # Оценка эффективности
+    md_lines.append("\n## Выводы об эффективности\n")
+    if report.overall_metrics.improvement_rate > 5:
+        md_lines.append(
+            "✅ **Высокая эффективность**: Вторичная проверка значительно улучшает точность (>5%)"
+        )
+    elif report.overall_metrics.improvement_rate > 0:
+        md_lines.append(
+            "⚠️ **Умеренная эффективность**: Вторичная проверка дает небольшое улучшение"
         )
     else:
-        return primary_eval, secondary_eval
+        md_lines.append("❌ **Низкая эффективность**: Вторичная проверка не улучшает результаты")
 
+    # Таблица с подробными результатами
+    md_lines.append("\n## Подробные результаты по вопросам\n")
+    md_lines.append(
+        "| ID | Топик | Сложность | Эталон | Первичная | Вторичная | Согласие | Статус |"
+    )
+    md_lines.append(
+        "|:--:|:------|:---------:|:------:|:---------:|:---------:|:--------:|:------:|"
+    )
 
-async def process_verifications(
-    test_collection: TestCollection, language: str = "ru"
-) -> list[TestVerification]:
-    """Обработать все верификации."""
-    verifications = []
-    total = test_collection.total_questions
-    processed = 0
-
-    for topic in test_collection.topics:
-        for question in topic.questions:
-            processed += 1
-            print(
-                f"  [{processed}/{total}] Проверка вопроса {question.question_id} ({topic.topic_name})"  # noqa: E501
-            )
-
-            primary_eval, secondary_eval = await verify_answer(question, language)
-
-            verification = TestVerification(
-                question_id=question.question_id,
-                topic=topic.topic_name,
-                difficulty=question.difficulty,
-                primary_evaluation=primary_eval,
-                secondary_evaluation=secondary_eval,
-                timestamp=datetime.now().isoformat(),
-            )
-
-            verifications.append(verification)
-
-    return verifications
-
-
-def calculate_metrics(verifications: list[TestVerification]) -> VerificationMetrics:
-    """Рассчитать метрики."""
-    if not verifications:
-        return VerificationMetrics(
-            total_verifications=0,
-            agreement_count=0,
-            disagreement_count=0,
-            agreement_rate=0.0,
-            average_score_difference=0.0,
-            correctness_match_rate=0.0,
+    for v in report.verifications:
+        # Форматирование данных
+        q_id = v.question_id
+        topic = v.topic[:20] + "..." if len(v.topic) > 20 else v.topic
+        difficulty = {"easy": "Легко", "medium": "Средне", "hard": "Сложно"}.get(
+            v.difficulty, v.difficulty
         )
 
-    total = len(verifications)
-    agreements = sum(1 for v in verifications if v.secondary_evaluation.agree_with_primary)
-    disagreements = total - agreements
+        # Эмодзи для булевых значений
+        ground_truth_emoji = "✓" if v.ground_truth else "✗"
+        primary_emoji = "✓" if v.primary_evaluation.is_correct else "✗"
+        secondary_emoji = "✓" if v.secondary_evaluation.is_correct else "✗"
+        agreement_emoji = "✓" if v.secondary_evaluation.agree_with_primary else "✗"
 
-    score_diffs = [
-        abs(v.secondary_evaluation.final_score - v.primary_evaluation.score) for v in verifications
-    ]
-    avg_score_diff = sum(score_diffs) / len(score_diffs) if score_diffs else 0
+        # Определение статуса
+        if v.secondary_evaluation.is_correct == v.ground_truth:
+            if v.primary_evaluation.is_correct == v.ground_truth:
+                status = "🟢"  # Обе правильно
+            else:
+                status = "🟡"  # Вторичная исправила ошибку
+        elif v.primary_evaluation.is_correct == v.ground_truth:
+            status = "🔴"  # Вторичная ухудшила
+        else:
+            status = "🔴"  # Обе неправильно
 
-    correctness_matches = sum(
-        1
-        for v in verifications
-        if v.primary_evaluation.is_correct == (v.secondary_evaluation.final_score >= 70)
+        md_lines.append(
+            f"| {q_id} | {topic} | {difficulty} | {ground_truth_emoji} | "
+            f"{primary_emoji} | {secondary_emoji} | {agreement_emoji} | {status} |"
+        )
+
+    # Легенда
+    md_lines.append("\n### Легенда\n")
+    md_lines.append("- **Эталон**: правильность ответа согласно тестовым данным")
+    md_lines.append("- **Первичная/Вторичная**: оценка нейросети (✓ = правильно, ✗ = неправильно)")
+    md_lines.append("- **Согласие**: согласна ли вторичная проверка с первичной")
+    md_lines.append(
+        "- **Статус**: 🟢 = вторичная корректна, 🟡 = вторичная исправила, 🔴 = ошибка"
     )
-    correctness_match_rate = (correctness_matches / total * 100) if total > 0 else 0
 
-    return VerificationMetrics(
-        total_verifications=total,
-        agreement_count=agreements,
-        disagreement_count=disagreements,
-        agreement_rate=(agreements / total * 100) if total > 0 else 0,
-        average_score_difference=avg_score_diff,
-        correctness_match_rate=correctness_match_rate,
-    )
-
-
-def generate_report(verifications: list[TestVerification]) -> EffectivenessReport:
-    """Генерировать полный отчет."""
-    overall_metrics = calculate_metrics(verifications)
-
-    # По сложности
-    by_difficulty_dict = {}
-    for difficulty in DifficultyLevel:
-        diff_verifs = [v for v in verifications if v.difficulty == difficulty]
-        if diff_verifs:
-            by_difficulty_dict[difficulty] = calculate_metrics(diff_verifs)
-
-    by_difficulty = [
-        DifficultyMetrics(difficulty=diff, metrics=metrics)
-        for diff, metrics in by_difficulty_dict.items()
-    ]
-
-    # По темам
-    by_topic_dict = {}
-    for verification in verifications:
-        if verification.topic not in by_topic_dict:
-            by_topic_dict[verification.topic] = []
-        by_topic_dict[verification.topic].append(verification)
-
-    by_topic = [
-        TopicMetrics(topic=topic, metrics=calculate_metrics(topic_verifs))
-        for topic, topic_verifs in by_topic_dict.items()
-    ]
-
-    return EffectivenessReport(
-        report_date=datetime.now().isoformat(),
-        overall_metrics=overall_metrics,
-        by_difficulty=by_difficulty,
-        by_topic=by_topic,
-        verifications=verifications,
-    )
+    return "\n".join(md_lines)
 
 
 async def main(args: argparse.Namespace) -> None:
-    """Главная функция."""
-    print("🚀 Запуск анализа эффективности вторичной проверки\n")
+    print("🔍 Загрузка тестовых данных...")
+    test_collection = load_test_collection_from_file(args.test_data)
 
-    # Загрузка данных
-    print(f"📂 Загрузка тестовых данных из: {args.test_data}")
-    try:
-        test_collection = load_test_collection_from_file(args.test_data)
-        print(f"✅ Загружено {len(test_collection.topics)} тем")
-        print(f"   Всего вопросов: {test_collection.total_questions}\n")
-    except FileNotFoundError:
-        print(f"❌ Ошибка: файл не найден: {args.test_data}")
-        sys.exit(1)
-    except json.JSONDecodeError as e:
-        print(f"❌ Ошибка парсинга JSON: {e}")
-        sys.exit(1)
+    print(f"📊 Найдено {test_collection.total_questions} вопросов\n")
+    print("⚙️ Начинаем верификацию...")
 
-    # Обработка верификаций
-    print("⏳ Обработка верификаций (это может занять время)...")
     try:
         verifications = await process_verifications(test_collection, args.language)
-        print(f"✅ Обработано {len(verifications)} верификаций\n")
+        print(f"\n✅ Обработано {len(verifications)} вопросов")
     except Exception as e:
-        print(f"❌ Ошибка при обработке: {e}")
+        print(f"❌ Ошибка: {e}")
         sys.exit(1)
 
-    # Генерирование отчета
-    print("📊 Генерирование отчета...")
-    report = generate_report(verifications)
-    print("✅ Отчет готов\n")
+    # Генерируем отчет
+    overall_metrics = calculate_metrics(verifications)
+    report = EffectivenessReport(
+        report_date=datetime.now().isoformat(),
+        overall_metrics=overall_metrics,
+        verifications=verifications,
+    )
 
-    # Генерирование markdown
-    markdown_report = generate_markdown_report(report)
-    print(markdown_report)
+    markdown = generate_markdown_report(report)
 
-    # Сохранение отчета в markdown
-    if args.output:
-        output_path = Path(args.output)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+    # Сохраняем результаты
+    output_path = Path(args.output)
+    output_path.write_text(markdown, encoding="utf-8")
+    print(f"\n📝 Отчет сохранен: {args.output}")
 
-        async with aiofiles.open(output_path) as f:
-            await f.write(markdown_report)
-
-        print(f"\n📄 Отчет сохранен в: {output_path}")
-        print(f"📏 Размер отчета: {len(markdown_report)} байт")
-
-
-def main_sync(args: argparse.Namespace) -> None:
-    """Синхронный вход для asyncio."""
-    asyncio.run(main(args))
+    # Выводим ключевую метрику
+    print(f"\n🎯 Улучшение от вторичной проверки: {overall_metrics.improvement_rate:+.1f}%")
+    print(f"📊 Точность первичной: {overall_metrics.primary_accuracy:.1f}%")
+    print(f"📊 Точность вторичной: {overall_metrics.secondary_accuracy:.1f}%")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Измерение метрики эффективности вторичной проверки LLM"
-    )
-
-    parser.add_argument(
-        "--test-data",
-        type=str,
-        default="test_data.json",
-        help="Путь к JSON файлу с тестовыми данными",
-    )
-
-    parser.add_argument(
-        "--output",
-        type=str,
-        default="secondary_verification_report.md",
-        help="Путь для сохранения отчета (default: secondary_verification_report.md)",
-    )
-
-    parser.add_argument(
-        "--language",
-        type=str,
-        default="ru",
-        choices=["ru", "en"],
-        help="Язык для проверки (default: ru)",
-    )
-
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--test-data", default="test_data_updated.json")
+    parser.add_argument("--language", default="ru")
+    parser.add_argument("--output", default="effectiveness_report.md")
     args = parser.parse_args()
-    main_sync(args)
+
+    asyncio.run(main(args))

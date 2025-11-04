@@ -75,7 +75,7 @@ class TestResult(Base):
 
 
 class Verification(Base):
-    """Таблица проверок."""
+    """Таблица верификаций без баллов"""
 
     __tablename__ = "verifications"
 
@@ -84,9 +84,17 @@ class Verification(Base):
     user_id: Mapped[str] = mapped_column(String, nullable=False)
     question: Mapped[str] = mapped_column(Text, nullable=False)
     user_answer: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Только булевы значения, без баллов
     is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    score: Mapped[float] = mapped_column(Float, nullable=False)
+
     feedback: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Вторичная проверка
+    secondary_is_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    agree_with_primary: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    verification_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
 

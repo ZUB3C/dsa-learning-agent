@@ -5,27 +5,32 @@ from pydantic import BaseModel, Field
 
 # Модуль 1: Проверка тестирований
 class VerificationDetails(BaseModel):
+    """Детали верификации без баллов"""
+
     verification_id: str = Field(description="ID верификации")
-    primary_score: float = Field(description="Оценка первичной проверки")
-    secondary_score: float | None = Field(default=None, description="Оценка вторичной проверки")
-    agree_with_primary: bool | None = Field(
-        default=None, description="Согласие вторичной проверки с первичной"
+    primary_is_correct: bool = Field(description="Вердикт первичной проверки")
+    secondary_is_correct: bool | None = Field(
+        default=None, description="Вердикт вторичной проверки"
     )
-    verification_notes: str | None = Field(default=None, description="Заметки вторичной проверки")
+    agree_with_primary: bool | None = Field(
+        default=None, description="Согласие вторичной с первичной"
+    )
+    verification_notes: str | None = Field(default=None, description="Заметки верификации")
 
 
 class TestVerificationRequest(BaseModel):
+    """Запрос на верификацию теста"""
+
     test_id: str = Field(description="ID теста")
     user_answer: str = Field(description="Ответ пользователя")
     language: str = Field(default="ru", description="Язык (ru/en)")
     question: str = Field(description="Текст вопроса")
     expected_answer: str | None = Field(default=None, description="Эталонный ответ")
-    secondary_check: bool = Field(default=True, description="Включить вторичную проверку")
+    secondary_check: bool = Field(default=True, description="Использовать вторичную проверку")
 
 
 class TestVerificationResponse(BaseModel):
     is_correct: bool = Field(description="Правильность ответа")
-    score: float = Field(description="Оценка от 0 до 100")
     feedback: str = Field(description="Обратная связь")
     verification_details: VerificationDetails = Field(description="Детали проверки")
 
@@ -286,14 +291,13 @@ class VerificationHistoryItem(BaseModel):
     verification_id: str
     test_id: str
     question: str
-    score: float
     is_correct: bool
     created_at: str
 
 
 class GetVerificationHistoryResponse(BaseModel):
     tests: list[VerificationHistoryItem]
-    average_score: float
+    accuracy_rate: float  # Процент правильных ответов
     total_tests: int
 
 

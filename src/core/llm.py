@@ -38,11 +38,11 @@ def get_deepseek_llm(
 
 def get_llm_by_language(language: str) -> BaseChatModel:
     """Получить подходящую LLM в зависимости от языка."""
-    if language.lower() in {"ru", "russian", "русский"}:
-        return get_gigachat_llm()
-    if language.lower() in {"en", "english", "английский"}:
-        return get_deepseek_llm()
-    # По умолчанию русский
+    # if language.lower() in {"ru", "russian", "русский"}:
+    #     return get_gigachat_llm()
+    # if language.lower() in {"en", "english", "английский"}:
+    #     return get_deepseek_llm()
+    # # По умолчанию русский
     return get_gigachat_llm()
 
 

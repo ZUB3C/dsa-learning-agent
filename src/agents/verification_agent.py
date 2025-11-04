@@ -19,7 +19,6 @@ VERIFICATION_SYSTEM_PROMPT = (
     "Оцени ответ по шкале от 0 до 100 и дай развернутую обратную связь.\n"
     "Формат ответа должен быть JSON:\n"
     "{{\n"
-    '  "score": <число от 0 до 100>,\n'
     '  "is_correct": <true/false>,\n'
     '  "feedback": "<подробная обратная связь>"\n'
     "}}"
@@ -35,7 +34,7 @@ def build_verification_agent(language: str = "ru") -> Runnable:
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", VERIFICATION_SYSTEM_PROMPT),
-        ("human", "Проверь ответ."),
+        ("human", "Проверь ответ на тест."),
     ])
 
     return prompt | llm | StrOutputParser()
@@ -45,9 +44,9 @@ def build_secondary_verification_agent(language: str = "ru") -> Runnable:
     """Агент для вторичной проверки (другой провайдер для снижения галлюцинаций)."""
     # Используем противоположную модель для перекрестной проверки
     if language.lower() in {"ru", "russian", "русский"}:
-        llm = get_deepseek_llm()
-    else:
         llm = get_gigachat_llm()
+    else:
+        llm = get_deepseek_llm()
 
     secondary_prompt = ChatPromptTemplate.from_messages([
         (
@@ -65,8 +64,7 @@ def build_secondary_verification_agent(language: str = "ru") -> Runnable:
             "Формат ответа JSON:\n"
             "{{\n"
             '  "agree_with_primary": <true/false>,\n'
-            '  "final_score": <число от 0 до 100>,\n'
-            '  "final_feedback": "<итоговая обратная связь>",\n'
+            '  "feedback": "<итоговая обратная связь>",\n'
             '  "verification_notes": "<замечания по первичной проверке, если есть>"\n'
             "}}",
         ),

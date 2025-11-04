@@ -230,7 +230,6 @@ async def submit_assessment(request: AssessmentSubmitRequest) -> AssessmentSubmi
             questions = json.loads(assessment_session.questions)
 
     correct_count: int = 0
-    topic_scores: dict[str, list[int]] = {}
 
     for answer in request.answers:
         question_id: int = answer.get("question_id")
@@ -246,10 +245,7 @@ async def submit_assessment(request: AssessmentSubmitRequest) -> AssessmentSubmi
         if is_correct:
             correct_count += 1
 
-        topic: str = question["topic"]
-        if topic not in topic_scores:
-            topic_scores[topic] = []
-        topic_scores[topic].append(1 if is_correct else 0)
+        question["topic"]
 
     percentage: float = (correct_count / len(questions)) * 100
 
@@ -261,9 +257,7 @@ async def submit_assessment(request: AssessmentSubmitRequest) -> AssessmentSubmi
     else:
         level = "beginner"
 
-    knowledge_areas: dict[str, float] = {
-        topic: sum(scores) / len(scores) * 100 for topic, scores in topic_scores.items()
-    }
+    knowledge_areas = {}
 
     recommendations: list[str] = []
     if level == "beginner":
@@ -288,33 +282,18 @@ async def submit_assessment(request: AssessmentSubmitRequest) -> AssessmentSubmi
             "Углубите понимание анализа алгоритмов и оптимизации",
         ])
 
-    # Добавляем специфичные рекомендации по слабым темам
-    for topic, score in knowledge_areas.items():
-        if score < 50:
-            topic_recommendations: dict[str, str] = {
-                "complexity": "Уделите внимание анализу сложности алгоритмов",
-                "data_structures": "Повторите базовые структуры данных",
-                "recursion": "Практикуйтесь в написании рекурсивных функций",
-                "sorting": "Изучите различные алгоритмы сортировки",
-                "trees": "Углубите знания о древовидных структурах",
-                "algorithms": "Практикуйтесь в решении алгоритмических задач",
-            }
-            if topic in topic_recommendations:
-                recommendations.append(topic_recommendations[topic])
-
     with get_db_session() as session:
         assessment = Assessment(
             user_id=user_id,
             session_id=request.session_id,
             level=level,
-            score=percentage,
             knowledge_areas=json.dumps(knowledge_areas),
             recommendations=json.dumps(recommendations),
         )
         session.add(assessment)
 
     return AssessmentSubmitResponse(
-        level=level, knowledge_areas=knowledge_areas, recommendations=recommendations
+        knowledge_areas=knowledge_areas, recommendations=recommendations
     )
 
 
@@ -337,7 +316,6 @@ async def get_assessment_results(user_id: str) -> GetAssessmentResultsResponse:
         return GetAssessmentResultsResponse(
             user_id=user_id,
             initial_level=result.level,
-            score=result.score,
             knowledge_areas=json.loads(result.knowledge_areas) if result.knowledge_areas else {},
             recommendations=json.loads(result.recommendations) if result.recommendations else [],
             completed_at=result.completed_at.isoformat(),
