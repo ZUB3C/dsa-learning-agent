@@ -13,11 +13,12 @@ def get_gigachat_llm(
     timeout: int | None = None,
 ) -> BaseChatModel:
     """Получить LLM для GigaChat (русский язык)."""
-    return ChatGoogleGenerativeAI(
+    return ChatOpenAI(
         api_key=settings.gigachat_api_key or None,
         model=model or settings.gigachat_model,
         temperature=temperature if temperature is not None else settings.llm_temperature,
         timeout=timeout or settings.timeout_s,
+        base_url=settings.gigachat_base_url or None,
     )
 
 

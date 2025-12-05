@@ -119,8 +119,8 @@ cp .env.example .env
 ```env
 # GigaChat (Russian)
 GIGACHAT_API_KEY=your_gigachat_api_key_here
-GIGACHAT_MODEL=GigaChat
-GIGACHAT_BASE_URL=https://gigachat.devices.sberbank.ru/api/v1
+GIGACHAT_MODEL=GigaChat/GigaChat-2-Max
+GIGACHAT_BASE_URL=https://foundation-models.api.cloud.ru/v1
 
 # DeepSeek (English)
 DEEPSEEK_API_KEY=your_deepseek_api_key_here
