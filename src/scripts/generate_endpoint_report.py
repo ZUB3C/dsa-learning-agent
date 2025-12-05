@@ -1304,7 +1304,7 @@ async def main() -> None:
     # Запуск тестов в логичном порядке
     try:
         # 1. System Health (базовая проверка)
-        health_results = await test_health_endpoints()
+        health_results = test_health_endpoints()
         all_results.extend(health_results)
 
         # 2. Assessment (оценка пользователя)
