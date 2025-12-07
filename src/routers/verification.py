@@ -23,7 +23,7 @@ async def check_test(request: TestVerificationRequest) -> TestVerificationRespon
         user_id = "unknown"
         verification_id = str(uuid.uuid4())
 
-        # Первичная проверка
+        # Первичная проверка - теперь возвращает {"verdict": true/false}
         primary_agent = load_agent("verification", language=request.language)
         primary_result = await primary_agent.ainvoke({
             "question": request.question,
@@ -33,18 +33,26 @@ async def check_test(request: TestVerificationRequest) -> TestVerificationRespon
 
         try:
             primary_eval = json.loads(primary_result)
+            # НОВЫЙ ФОРМАТ: {"verdict": true/false}
+            # Сохраняем обратную совместимость со старым форматом
+            if "verdict" in primary_eval:
+                is_correct = primary_eval["verdict"]
+            elif "is_correct" in primary_eval:
+                is_correct = primary_eval["is_correct"]
+            else:
+                is_correct = False
         except json.JSONDecodeError:
             raise HTTPException(status_code=500, detail="Failed to parse primary evaluation")
 
-        is_correct = primary_eval.get("is_correct", False)
-        feedback = primary_eval.get("feedback", "")
+        feedback = ""  # В новом формате первичная проверка не дает фидбек
+        primary_verdict = is_correct  # Сохраняем для передачи вторичной проверке
 
         # Вторичная проверка
         secondary_eval = None
         if request.secondary_check:
             secondary_agent = load_agent("verification-secondary", language=request.language)
             secondary_result = await secondary_agent.ainvoke({
-                "primary_evaluation": json.dumps(primary_eval, ensure_ascii=False),
+                "primary_verdict": primary_verdict,  # Передаем только булево значение
                 "question": request.question,
                 "user_answer": request.user_answer,
             })
@@ -54,13 +62,35 @@ async def check_test(request: TestVerificationRequest) -> TestVerificationRespon
             except json.JSONDecodeError:
                 raise HTTPException(status_code=500, detail="Failed to parse secondary evaluation")
 
-        # Финальные значения
+        # Финальные значения (если есть вторичная проверка, берем от нее)
         if secondary_eval:
-            is_correct = secondary_eval.get("is_correct", is_correct)
-            feedback = secondary_eval.get("feedback", feedback)
+            # Ожидаем формат: {"agree_with_primary": bool, "verdict": bool, "feedback": str, ...}
+            if "verdict" in secondary_eval:
+                is_correct = secondary_eval["verdict"]
+            elif "is_correct" in secondary_eval:
+                is_correct = secondary_eval["is_correct"]
+            else:
+                is_correct = primary_verdict
+
+            feedback = secondary_eval.get("feedback", "")
 
         # Сохранение в БД
         with get_db_session() as session:
+            # Определяем значения для полей secondary_is_correct и agree_with_primary
+            secondary_is_correct = None
+            agree_with_primary = None
+            verification_notes = ""
+
+            if secondary_eval:
+                # Получаем вердикт вторичной проверки
+                if "verdict" in secondary_eval:
+                    secondary_is_correct = secondary_eval["verdict"]
+                elif "is_correct" in secondary_eval:
+                    secondary_is_correct = secondary_eval["is_correct"]
+
+                agree_with_primary = secondary_eval.get("agree_with_primary")
+                verification_notes = secondary_eval.get("verification_notes", "")
+
             verification = Verification(
                 verification_id=verification_id,
                 test_id=request.test_id,
@@ -69,26 +99,19 @@ async def check_test(request: TestVerificationRequest) -> TestVerificationRespon
                 user_answer=request.user_answer,
                 is_correct=is_correct,
                 feedback=feedback,
-                secondary_is_correct=secondary_eval.get("is_correct") if secondary_eval else None,
-                agree_with_primary=secondary_eval.get("agree_with_primary")
-                if secondary_eval
-                else None,
-                verification_notes=secondary_eval.get("verification_notes", "")
-                if secondary_eval
-                else None,
+                secondary_is_correct=secondary_is_correct,
+                agree_with_primary=agree_with_primary,
+                verification_notes=verification_notes,
             )
             session.add(verification)
 
+        # Создаем детали верификации для ответа
         verification_details = VerificationDetails(
             verification_id=verification_id,
-            primary_is_correct=primary_eval.get("is_correct", False),
-            secondary_is_correct=secondary_eval.get("is_correct") if secondary_eval else None,
-            agree_with_primary=secondary_eval.get("agree_with_primary")
-            if secondary_eval
-            else None,
-            verification_notes=secondary_eval.get("verification_notes", "")
-            if secondary_eval
-            else None,
+            primary_is_correct=primary_verdict,
+            secondary_is_correct=secondary_is_correct,
+            agree_with_primary=agree_with_primary,
+            verification_notes=verification_notes,
         )
 
         return TestVerificationResponse(

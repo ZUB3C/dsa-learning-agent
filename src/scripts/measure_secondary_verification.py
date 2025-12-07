@@ -34,14 +34,13 @@ class TestCollection(BaseModel):
 
 
 class PrimaryEvaluation(BaseModel):
-    is_correct: bool
-    feedback: str
+    verdict: bool  # Изменили is_correct на verdict для согласованности
 
 
 class SecondaryEvaluation(BaseModel):
     agree_with_primary: bool
-    is_correct: bool
-    feedback: str
+    verdict: bool  # Аналогично меняем здесь
+    feedback: str  # Фидбек теперь только от вторичной проверки
     verification_notes: str | None = None
 
 
@@ -77,7 +76,7 @@ async def verify_answer(
 ) -> tuple[PrimaryEvaluation, SecondaryEvaluation]:
     """Проверяет ответ без передачи is_correct"""
     try:
-        # Первичная проверка
+        # Первичная проверка - теперь возвращает только verdict
         primary_agent = load_agent("verification", language=language)
         primary_result = await primary_agent.ainvoke({
             "question": question.question_text,
@@ -87,14 +86,16 @@ async def verify_answer(
 
         try:
             primary_eval_dict = json.loads(primary_result)
+            # Ожидаем только {"verdict": true/false}
             primary_eval = PrimaryEvaluation(**primary_eval_dict)
         except (json.JSONDecodeError, ValueError):
-            primary_eval = PrimaryEvaluation(is_correct=False, feedback="Ошибка парсинга")
+            # В случае ошибки создаем объект с verdict=False
+            primary_eval = PrimaryEvaluation(verdict=False)
 
         # Вторичная проверка
         secondary_agent = load_agent("verification-secondary", language=language)
         secondary_result = await secondary_agent.ainvoke({
-            "primary_evaluation": json.dumps(primary_eval.model_dump(), ensure_ascii=False),
+            "primary_verdict": primary_eval.verdict,  # Передаем только булево значение
             "question": question.question_text,
             "user_answer": question.user_answer,
         })
@@ -105,8 +106,8 @@ async def verify_answer(
         except (json.JSONDecodeError, ValueError):
             secondary_eval = SecondaryEvaluation(
                 agree_with_primary=True,
-                is_correct=primary_eval.is_correct,
-                feedback=primary_eval.feedback,
+                verdict=primary_eval.verdict,
+                feedback="Ошибка парсинга ответа судьи",
                 verification_notes="Ошибка парсинга",
             )
 
@@ -115,11 +116,11 @@ async def verify_answer(
     except Exception as e:
         print(f"Ошибка в вопросе {question.question_id}: {e}")
         return (
-            PrimaryEvaluation(is_correct=False, feedback="Ошибка"),
+            PrimaryEvaluation(verdict=False),
             SecondaryEvaluation(
                 agree_with_primary=False,
-                is_correct=False,
-                feedback="Ошибка",
+                verdict=False,
+                feedback="Системная ошибка при проверке",
                 verification_notes=str(e),
             ),
         )
@@ -174,10 +175,10 @@ def calculate_metrics(verifications: list[TestVerification]) -> VerificationMetr
 
     # Точность проверок относительно ground truth
     primary_correct = sum(
-        1 for v in verifications if v.primary_evaluation.is_correct == v.ground_truth
+        1 for v in verifications if v.primary_evaluation.verdict == v.ground_truth
     )
     secondary_correct = sum(
-        1 for v in verifications if v.secondary_evaluation.is_correct == v.ground_truth
+        1 for v in verifications if v.secondary_evaluation.verdict == v.ground_truth
     )
 
     primary_accuracy = (primary_correct / total) * 100 if total > 0 else 0
@@ -266,17 +267,19 @@ def generate_markdown_report(report: EffectivenessReport) -> str:
 
         # Эмодзи для булевых значений
         ground_truth_emoji = "✓" if v.ground_truth else "✗"
-        primary_emoji = "✓" if v.primary_evaluation.is_correct else "✗"
-        secondary_emoji = "✓" if v.secondary_evaluation.is_correct else "✗"
+        # ИСПРАВЛЕНИЕ: используем .verdict вместо .is_correct
+        primary_emoji = "✓" if v.primary_evaluation.verdict else "✗"
+        secondary_emoji = "✓" if v.secondary_evaluation.verdict else "✗"
         agreement_emoji = "✓" if v.secondary_evaluation.agree_with_primary else "✗"
 
         # Определение статуса
-        if v.secondary_evaluation.is_correct == v.ground_truth:
-            if v.primary_evaluation.is_correct == v.ground_truth:
+        # ИСПРАВЛЕНИЕ: используем .verdict вместо .is_correct
+        if v.secondary_evaluation.verdict == v.ground_truth:
+            if v.primary_evaluation.verdict == v.ground_truth:
                 status = "🟢"  # Обе правильно
             else:
                 status = "🟡"  # Вторичная исправила ошибку
-        elif v.primary_evaluation.is_correct == v.ground_truth:
+        elif v.primary_evaluation.verdict == v.ground_truth:
             status = "🔴"  # Вторичная ухудшила
         else:
             status = "🔴"  # Обе неправильно
