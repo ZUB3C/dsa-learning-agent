@@ -45,12 +45,10 @@ class RequestClassifier:
 
     def __init__(self) -> None:
         llm = get_llm()
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", _SYSTEM_PROMPT),
-                ("human", "USER MESSAGE:\n{message}"),
-            ]
-        )
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", _SYSTEM_PROMPT),
+            ("human", "USER MESSAGE:\n{message}"),
+        ])
         self._chain = prompt | llm | StrOutputParser()
 
     async def classify(self, message: str) -> ClassificationResult:

@@ -43,7 +43,9 @@ class Executor:
                 user_id=request.user_id,
                 message=request.message,
             )
-            return ExecutionResult(main_result=main_res, support_result=None, agents_used=agents_used)
+            return ExecutionResult(
+                main_result=main_res, support_result=None, agents_used=agents_used
+            )
 
         async def run_main() -> WorkerResult:
             if cls.task_type == TaskType.MATERIALS:
@@ -72,7 +74,9 @@ class Executor:
 
         if not cls.include_support:
             main_res = await run_main()
-            return ExecutionResult(main_result=main_res, support_result=None, agents_used=agents_used)
+            return ExecutionResult(
+                main_result=main_res, support_result=None, agents_used=agents_used
+            )
 
         support_worker = SupportWorker()
         agents_used.append("support")
@@ -85,4 +89,6 @@ class Executor:
             )
 
         main_res, supp_res = await asyncio.gather(run_main(), run_support())
-        return ExecutionResult(main_result=main_res, support_result=supp_res, agents_used=agents_used)
+        return ExecutionResult(
+            main_result=main_res, support_result=supp_res, agents_used=agents_used
+        )
