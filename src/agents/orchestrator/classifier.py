@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 
-from ...core.llm import get_llm
+from ...core.llm import simple_chain
 from ...models.orchestrator_schemas import ClassificationResult, TaskType
 
 
@@ -16,17 +17,16 @@ _SYSTEM_PROMPT = """
 
 Твоя задача:
 1. Определи task_type:
-   - "materials"      — студент хочет объяснение темы, примеры, теорию
-   - "test"           — студент просит сгенерировать тест или задачи
-   - "verification"   — студент просит проверить свой ответ
-   - "support"        — студент просит ТОЛЬКО психологическую поддержку
+   - "materials" — студент хочет объяснение темы, примеры, теорию
+   - "test" — студент просит сгенерировать тест или задачи
+   - "verification" — студент просит проверить свой ответ
+   - "support" — студент просит ТОЛЬКО психологическую поддержку
 
 2. Определи include_support (true/false):
-   - true, если в тексте есть стресс, выгорание, тревога, желание всё бросить.
+   - true, если в тексте есть стресс, выгорание, тревога, желание всё бросить
 
-3. Извлеки topic (строкой) ИЛИ null.
-
-4. При возможности извлеки question и user_answer.
+3. Извлеки topic (строкой) ИЛИ null:
+   - Кратко сформулируй тему запроса
 
 Ответ верни СТРОГО в формате JSON:
 {
@@ -41,22 +41,14 @@ _SYSTEM_PROMPT = """
 
 
 class RequestClassifier:
-    """LLM-классификатор пользовательских запросов."""
-
     def __init__(self) -> None:
-        llm = get_llm()
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", _SYSTEM_PROMPT),
-            ("human", "USER MESSAGE:\n{message}"),
-        ])
-        self._chain = prompt | llm | StrOutputParser()
+        self._chain = simple_chain(_SYSTEM_PROMPT)
 
     async def classify(self, message: str) -> ClassificationResult:
-        raw = await self._chain.ainvoke({"message": message})
+        raw = await self._chain.ainvoke({"input": message})
+        data: dict[str, Any]
         try:
-            import json
-
-            data: dict[str, Any] = json.loads(raw)
+            data = json.loads(raw)
         except Exception:
             data = {
                 "task_type": "materials",

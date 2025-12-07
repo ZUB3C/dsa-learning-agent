@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import List
+
 from ...models.orchestrator_schemas import ClassificationResult, ResolveResponse, SupportBlock
 from .executor import ExecutionResult
 

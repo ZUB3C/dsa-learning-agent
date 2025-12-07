@@ -1,5 +1,6 @@
 from enum import Enum
 from pydantic import BaseModel
+from typing import List
 
 
 class TaskType(str, Enum):
@@ -26,7 +27,7 @@ class ResolveRequest(BaseModel):
 
 class SupportBlock(BaseModel):
     message: str
-    recommendations: list[str] = []
+    recommendations: List[str] = []
 
 
 class ResolveResponse(BaseModel):
@@ -34,5 +35,5 @@ class ResolveResponse(BaseModel):
     main_content: str
     task_type: TaskType
     support: SupportBlock | None = None
-    agents_used: list[str]
+    agents_used: List[str]
     execution_time_ms: int

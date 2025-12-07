@@ -15,8 +15,6 @@ class WorkerResult:
 
 
 class BaseWorker:
-    """Базовый HTTP-воркер, вызывающий существующие REST эндпоинты."""
-
     endpoint: str
 
     def __init__(self, base_url: str | None = None) -> None:
