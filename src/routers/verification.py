@@ -152,4 +152,4 @@ async def get_verification_history(user_id: str) -> GetVerificationHistoryRespon
 
         return GetVerificationHistoryResponse(
             tests=tests_list, accuracy_rate=accuracy_rate, total_tests=len(tests_list)
-        )
+            )
