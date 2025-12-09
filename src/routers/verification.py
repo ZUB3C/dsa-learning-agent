@@ -4,7 +4,7 @@ import uuid
 from fastapi import APIRouter, HTTPException
 
 from ..agents.registry import load_agent
-from ..core.database import TestResult, Verification, get_db_session, get_or_create_user
+from ..core.database import Verification, get_db_session
 from ..models.schemas import (
     GetVerificationHistoryResponse,
     TestVerificationRequest,
@@ -152,4 +152,4 @@ async def get_verification_history(user_id: str) -> GetVerificationHistoryRespon
 
         return GetVerificationHistoryResponse(
             tests=tests_list, accuracy_rate=accuracy_rate, total_tests=len(tests_list)
-            )
+        )

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING
 
-from ...models.orchestrator_schemas import ResolveRequest, ResolveResponse
+from .aggregator import Aggregator
 from .classifier import RequestClassifier
 from .executor import Executor
-from .aggregator import Aggregator
+
+if TYPE_CHECKING:
+    from ...models.orchestrator_schemas import ResolveRequest, ResolveResponse
 
 
 class Orchestrator:
@@ -21,9 +24,7 @@ class Orchestrator:
         exec_result = await self._executor.execute(request, classification)
 
         elapsed_ms = int((time.time() - start) * 1000)
-        response = self._aggregator.aggregate(exec_result, classification, elapsed_ms)
-
-        return response
+        return aggregate(exec_result, classification, elapsed_ms)
 
 
 orchestrator = Orchestrator()

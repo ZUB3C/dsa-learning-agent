@@ -7,10 +7,10 @@ from ..config import settings
 
 
 def get_llm(
-        model: str | None = None,
-        temperature: float | None = None,
-        timeout: int | None = None,
-        use_gigachat3: bool = False,
+    model: str | None = None,
+    temperature: float | None = None,
+    timeout: int | None = None,
+    use_gigachat3: bool = False,
 ) -> BaseChatModel:
     """LLM GigaChat (единый провайдер с поддержкой двух моделей)."""
     # Выбираем модель: GigaChat3 если указано, иначе основную
@@ -31,10 +31,7 @@ def get_llm(
     )
 
 
-def simple_chain(
-        system_msg: str,
-        use_gigachat3: bool = False
-):
+def simple_chain(system_msg: str, use_gigachat3: bool = False):  # noqa: ANN201
     """Простая цепочка: prompt | llm | parser."""
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_msg),

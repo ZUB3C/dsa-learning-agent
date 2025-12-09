@@ -3,12 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate
-
 from ...core.llm import simple_chain
 from ...models.orchestrator_schemas import ClassificationResult, TaskType
-
 
 _SYSTEM_PROMPT = """
 Ты — классификатор запросов для образовательной платформы по алгоритмам и структурам данных.

@@ -111,7 +111,7 @@ async def verify_answer(
                 verification_notes="Ошибка парсинга",
             )
 
-        return primary_eval, secondary_eval
+        return primary_eval, secondary_eval  # noqa: TRY300
 
     except Exception as e:
         print(f"Ошибка в вопросе {question.question_id}: {e}")
@@ -227,8 +227,10 @@ def generate_markdown_report(report: EffectivenessReport) -> str:
         f"\n**Дата:** {report.report_date}",
         "\n## Общая статистика\n",
         f"- **Всего проверок:** {report.overall_metrics.total_verifications}",
-        f"- **Согласие проверок:** {report.overall_metrics.agreement_count} ({report.overall_metrics.agreement_rate:.1f}%)",
-        f"- **Расхождения:** {report.overall_metrics.disagreement_count} ({100 - report.overall_metrics.agreement_rate:.1f}%)",
+        f"- **Согласие проверок:** {report.overall_metrics.agreement_count} "
+        f"({report.overall_metrics.agreement_rate:.1f}%)",
+        f"- **Расхождения:** {report.overall_metrics.disagreement_count} "
+        f"({100 - report.overall_metrics.agreement_rate:.1f}%)",
         "\n### 🎯 Точность относительно эталона\n",
         f"- **Точность первичной проверки:** {report.overall_metrics.primary_accuracy:.1f}%",
         f"- **Точность вторичной проверки:** {report.overall_metrics.secondary_accuracy:.1f}%",
@@ -327,7 +329,7 @@ async def main(args: argparse.Namespace) -> None:
 
     # Сохраняем результаты
     output_path = Path(args.output)
-    output_path.write_text(markdown, encoding="utf-8")
+    output_path.write_text(markdown, encoding="utf-8")  # noqa: ASYNC240
     print(f"\n📝 Отчет сохранен: {args.output}")
 
     # Выводим ключевую метрику
