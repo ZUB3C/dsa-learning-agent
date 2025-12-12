@@ -844,7 +844,8 @@ async def test_verification_endpoints() -> list[EndpointTestResult]:
             execution_time=execution_time,
         )
         logger.info(
-            f"✓ Успешно. Оценка: {result2.score}. Правильно: {result2.is_correct}. Время: {execution_time:.3f}s"  # noqa: E501
+            f"✓ Успешно. Оценка: {result2.score}. Правильно: "
+            f"{result2.is_correct}. Время: {execution_time:.3f}s"
         )
         results.append(test_result)
     except Exception as e:
@@ -911,7 +912,8 @@ async def test_verification_endpoints() -> list[EndpointTestResult]:
             )
 
         logger.info(
-            f"✓ Успешно. Проверок: {len(result.tests)}. Средний балл: {result.average_score:.2f}. Время: {execution_time:.3f}s"  # noqa: E501
+            f"✓ Успешно. Проверок: {len(result.tests)}. Средний балл: "
+            f"{result.average_score:.2f}. Время: {execution_time:.3f}s"
         )
         results.append(test_result)
     except Exception as e:
@@ -1042,7 +1044,8 @@ async def test_llm_router_endpoints() -> list[EndpointTestResult]:
             execution_time=execution_time,
         )
         logger.info(
-            f"✓ Успешно. Контент сгенерирован. Модель: {result.model_used}. Время: {execution_time:.3f}s"  # noqa: E501
+            f"✓ Успешно. Контент сгенерирован. Модель: "
+            f"{result.model_used}. Время: {execution_time:.3f}s"
         )
         results.append(test_result)
     except Exception as e:
@@ -1099,7 +1102,8 @@ async def test_support_endpoints() -> list[EndpointTestResult]:
             execution_time=execution_time,
         )
         logger.info(
-            f"✓ Успешно. Статей: {len(result.articles)}, Упражнений: {len(result.exercises)}. Время: {execution_time:.3f}s"  # noqa: E501
+            f"✓ Успешно. Статей: {len(result.articles)}, Упражнений: "
+            f"{len(result.exercises)}. Время: {execution_time:.3f}s"
         )
         results.append(test_result)
     except Exception as e:

@@ -1,17 +1,12 @@
-from __future__ import annotations
-
 import asyncio
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from ...models.orchestrator_schemas import ClassificationResult, ResolveRequest, TaskType
+from .workers.base_worker import BaseWorker, WorkerResult
 from .workers.materials_worker import MaterialsWorker
 from .workers.support_worker import SupportWorker
 from .workers.test_worker import TestWorker
 from .workers.verification_worker import VerificationWorker
-
-if TYPE_CHECKING:
-    from .workers.base_worker import WorkerResult
 
 
 @dataclass
@@ -22,7 +17,8 @@ class ExecutionResult:
 
 
 class Executor:
-    def _get_main_worker(self, task_type: TaskType):
+    @staticmethod
+    def _get_main_worker(task_type: TaskType) -> tuple[str, BaseWorker]:
         if task_type == TaskType.MATERIALS:
             return "materials", MaterialsWorker()
         if task_type == TaskType.TEST:

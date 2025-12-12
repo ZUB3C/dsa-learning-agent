@@ -1,6 +1,7 @@
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import Runnable
 from langchain_openai import ChatOpenAI
 
 from ..config import settings
@@ -10,6 +11,7 @@ def get_llm(
     model: str | None = None,
     temperature: float | None = None,
     timeout: int | None = None,
+    *,
     use_gigachat3: bool = False,
 ) -> BaseChatModel:
     """LLM GigaChat (единый провайдер с поддержкой двух моделей)."""
@@ -31,7 +33,7 @@ def get_llm(
     )
 
 
-def simple_chain(system_msg: str, use_gigachat3: bool = False):  # noqa: ANN201
+def simple_chain(system_msg: str, *, use_gigachat3: bool = False) -> Runnable[dict, str]:
     """Простая цепочка: prompt | llm | parser."""
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_msg),
@@ -42,11 +44,11 @@ def simple_chain(system_msg: str, use_gigachat3: bool = False):  # noqa: ANN201
 
 
 # Удобные функции-обертки
-def create_gigachat_chain(system_msg: str):
+def create_gigachat_chain(system_msg: str) -> Runnable[dict, str]:
     """Создать цепь с основной моделью GigaChat."""
     return simple_chain(system_msg, use_gigachat3=False)
 
 
-def create_gigachat3_chain(system_msg: str):
+def create_gigachat3_chain(system_msg: str) -> Runnable[dict, str]:
     """Создать цепь с моделью GigaChat3-10B-A1.8B."""
     return simple_chain(system_msg, use_gigachat3=True)

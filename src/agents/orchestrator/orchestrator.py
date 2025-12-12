@@ -1,14 +1,9 @@
-from __future__ import annotations
-
 import time
-from typing import TYPE_CHECKING
 
-from .aggregator import Aggregator
+from ...models.orchestrator_schemas import ResolveRequest, ResolveResponse
+from .aggregator import Aggregator, aggregate
 from .classifier import RequestClassifier
 from .executor import Executor
-
-if TYPE_CHECKING:
-    from ...models.orchestrator_schemas import ResolveRequest, ResolveResponse
 
 
 class Orchestrator:

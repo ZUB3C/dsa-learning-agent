@@ -211,7 +211,9 @@ def main() -> None:
     print("Filtering: Only .py files, excluding __pycache__")
     print(f"Excluded files: {', '.join(EXCLUDE_FILES) if EXCLUDE_FILES else 'None'}")
     print(
-        f"External files: {', '.join(INCLUDE_EXTERNAL_FILES) if INCLUDE_EXTERNAL_FILES else 'None'}\n"  # noqa: E501
+        f"External files: {
+            ', '.join(INCLUDE_EXTERNAL_FILES) if INCLUDE_EXTERNAL_FILES else 'None'
+        }\n"
     )
 
     # Collect all content
