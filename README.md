@@ -27,6 +27,19 @@
 ```
 src/
 ├── agents/                         # Агентная система (LangChain)
+│   ├── orchestrator/               # Оркестратор для комплексных запросов
+│   │   ├── workers/                # Воркеры для различных задач
+│   │   │   ├── __init__.py
+│   │   │   ├── base_worker.py      # Базовый класс для воркеров
+│   │   │   ├── materials_worker.py # Воркер для работы с материалами
+│   │   │   ├── support_worker.py   # Воркер психологической поддержки
+│   │   │   ├── test_worker.py      # Воркер генерации тестов
+│   │   │   └── verification_worker.py # Воркер проверки ответов
+│   │   ├── __init__.py
+│   │   ├── aggregator.py           # Агрегация результатов от воркеров
+│   │   ├── classifier.py           # Классификация запросов студентов
+│   │   ├── executor.py             # Выполнение задач через воркеров
+│   │   └── orchestrator.py         # Главный оркестратор системы
 │   ├── __init__.py
 │   ├── llm_router_agent.py         # Роутер для выбора подходящей LLM по языку и типу запроса
 │   ├── materials_agent.py          # Агент для адаптации учебных материалов под уровень студента
@@ -37,7 +50,7 @@ src/
 ├── core/                           # Ядро системы
 │   ├── __init__.py
 │   ├── database.py                 # Модели SQLAlchemy (User, Test, Assessment и др.)
-│   ├── llm.py                      # Инициализация LLM-провайдеров (GigaChat, DeepSeek)
+│   ├── llm.py                      # Инициализация LLM-провайдеров (GigaChat, GigaChat3)
 │   └── vector_store.py             # Менеджер ChromaDB для RAG-поиска материалов
 ├── data_processing/                # Обработка данных для RAG
 │   ├── __init__.py
@@ -46,6 +59,7 @@ src/
 │   └── text_splitter.py            # Умное разбиение текста на чанки с извлечением концепций
 ├── models/                         # Pydantic-модели
 │   ├── __init__.py
+│   ├── orchestrator_schemas.py     # Схемы для системы оркестрации
 │   └── schemas.py                  # Схемы запросов и ответов для всех API эндпоинтов
 ├── routers/                        # REST API маршруты
 │   ├── __init__.py
@@ -53,13 +67,16 @@ src/
 │   ├── health.py                   # Healthcheck эндпоинт для мониторинга
 │   ├── llm_router.py               # API выбора и использования LLM для различных задач
 │   ├── materials.py                # API получения и генерации учебных материалов
+│   ├── orchestrator.py             # API для обработки комплексных запросов через оркестратор
 │   ├── support.py                  # API психологической поддержки студентов
 │   ├── tests.py                    # API генерации и отправки тестов
 │   └── verification.py             # API проверки ответов с двойной верификацией
 ├── scripts/                        # Утилиты и скрипты
+│   ├── measure_secondary_verification.py # Скрипт измерения эффективности вторичной верификации
 │   └── populate_db.py              # CLI-скрипт для заполнения ChromaDB из PDF
 ├── config.py                       # Конфигурация через Pydantic Settings (.env)
 └── main.py                         # Точка входа FastAPI приложения
+
 ```
 
 ---
@@ -117,26 +134,23 @@ cp .env.example .env
 Заполнить API-ключи в `.env`:
 
 ```env
-# GigaChat (Russian)
+# LLM Settings
 GIGACHAT_API_KEY=your_gigachat_api_key_here
 GIGACHAT_MODEL=GigaChat/GigaChat-2-Max
 GIGACHAT_BASE_URL=https://foundation-models.api.cloud.ru/v1
 
-# DeepSeek (English)
-DEEPSEEK_API_KEY=your_deepseek_api_key_here
-DEEPSEEK_MODEL=deepseek-chat
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-
-# LLM Settings
 LLM_TEMPERATURE=0.2
 TIMEOUT_S=60
 
 # ChromaDB
-CHROMA_PERSIST_DIRECTORY=./chroma_db
+CHROMA_PERSIST_DIRECTORY=.chromadb
 CHROMA_COLLECTION_NAME=aisd_materials
 
 # RAG
 RAG_TOP_K=3
+
+# Database
+DATABASE_URL=sqlite+aiosqlite:///./app.db
 
 # Database population settings
 PDF_CHUNK_SIZE=1000
@@ -235,7 +249,7 @@ uv run python -m src.scripts.generate_endpoint_report
 
 - **Backend:** FastAPI + Uvicorn
 - **LLM Orchestration:** LangChain
-- **LLM Providers:** GigaChat (русский), DeepSeek (английский)
+- **LLM Providers:** [GigaChat-2-Max](https://giga.chat) и [GigaChat3-10B-A1.8B](https://huggingface.co/ai-sage/GigaChat3-10B-A1.8B/blob/main/README.md)
 - **Vector Database:** ChromaDB + HuggingFace Embeddings
 - **Relational Database:** SQLite (SQLAlchemy ORM)
 - **PDF Processing:** PyMuPDF (для парсинга LaTeX-PDF)
