@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
@@ -29,7 +30,7 @@ class WorkerResult:
     raw: dict[str, Any] | None = None
 
 
-class BaseWorker:
+class BaseWorker(ABC):
     """
     Base class for all orchestrator workers.
 
@@ -53,6 +54,21 @@ class BaseWorker:
         # a double slash when concatenated with ``endpoint``.
         if self.base_url.endswith("/"):
             self.base_url = self.base_url.rstrip("/")
+
+    @abstractmethod
+    async def run(self, *args: Any, **kwargs: Any) -> WorkerResult:
+        """
+        Execute the worker's main task.
+
+        Sub‑classes must override this method with their specific signature.
+
+        Returns
+        -------
+        WorkerResult
+            The result of the worker execution.
+        """
+        msg = "Subclasses must implement the run method"
+        raise NotImplementedError(msg)
 
     async def _post(self, payload: dict[str, Any]) -> WorkerResult:
         """
