@@ -100,3 +100,6 @@ pythonPlatform = "All"
 pythonVersion = "3.13"
 reportMissingImports = true
 reportMissingTypeStubs = true
+
+[tool.codespell]
+ignore-words-list = ["FPR"]
