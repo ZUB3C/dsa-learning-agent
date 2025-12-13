@@ -4,7 +4,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 
 from ..config import settings
-from ..core.llm import get_llm_by_language
+from ..core.llm import get_llm
 from ..core.vector_store import vector_store_manager
 
 MATERIALS_SYSTEM_PROMPT = """Ты - преподаватель по алгоритмам и структурам данных.
@@ -38,7 +38,7 @@ QUESTION_SYSTEM_PROMPT = """Ты - преподаватель по алгори�
 
 def build_materials_agent(language: str = "ru") -> Runnable:
     """Агент для подбора и адаптации материалов."""
-    llm = get_llm_by_language(language)
+    llm = get_llm(language)
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", MATERIALS_SYSTEM_PROMPT),
@@ -50,7 +50,7 @@ def build_materials_agent(language: str = "ru") -> Runnable:
 
 def build_question_answering_agent(language: str = "ru") -> Runnable:
     """Агент для ответов на вопросы по материалам."""
-    llm = get_llm_by_language(language)
+    llm = get_llm(language)
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", QUESTION_SYSTEM_PROMPT),

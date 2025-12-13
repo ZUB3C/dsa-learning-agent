@@ -5,7 +5,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 
-from ..core.llm import get_deepseek_llm, get_gigachat_llm, get_llm_by_language
+from ..core.llm import get_llm
 
 RequestType = Literal["material", "task", "test", "question", "support"]
 
@@ -22,24 +22,12 @@ class LLMRouter:
         """Инициализация роутера с языком по умолчанию."""
         self.default_language = language
 
-    def select_llm(
-        self, language: str | None = None, request_type: RequestType | None = None
-    ) -> Runnable:
+    def select_llm(self, language: str | None = None) -> Runnable:
         """Выбрать подходящую LLM."""
         lang = language or self.default_language
 
         # Определяем базовую модель по языку
-        base_llm = get_llm_by_language(lang)
-
-        # Можно добавить логику выбора в зависимости от типа запроса
-        # Например, для задач использовать модель с большей температурой
-        if request_type in {"task", "test"}:
-            # Для генерации задач можем использовать чуть большую температуру
-            if lang.lower() in {"ru", "russian", "русский"}:
-                return get_gigachat_llm(temperature=0.4)
-            return get_deepseek_llm(temperature=0.4)
-
-        return base_llm
+        return get_llm(lang)
 
     def get_model_name(self, language: str | None = None) -> str:
         """Получить название используемой модели."""
@@ -75,7 +63,7 @@ class LLMRouter:
     ) -> dict[str, Any]:
         """Генерировать контент с помощью выбранной LLM."""
         lang = language or self.default_language
-        llm = self.select_llm(lang, request_type)
+        llm = self.select_llm(lang)
 
         if not system_prompt:
             system_prompt = (

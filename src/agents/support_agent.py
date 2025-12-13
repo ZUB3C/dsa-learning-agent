@@ -2,7 +2,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 
-from ..core.llm import get_llm_by_language
+from ..core.llm import get_llm
 
 SUPPORT_SYSTEM_PROMPT = (
     "Ты - эмпатичный помощник, который оказывает психологическую поддержку студентам,"
@@ -23,7 +23,7 @@ SUPPORT_SYSTEM_PROMPT = (
 
 def build_support_agent(language: str = "ru") -> Runnable:
     """Агент психологической поддержки."""
-    llm = get_llm_by_language(language)
+    llm = get_llm(language)
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", SUPPORT_SYSTEM_PROMPT),
