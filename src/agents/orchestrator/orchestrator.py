@@ -1,7 +1,7 @@
 import time
 
 from ...models.orchestrator_schemas import ResolveRequest, ResolveResponse
-from .aggregator import Aggregator, aggregate
+from .aggregator import aggregate
 from .classifier import RequestClassifier
 from .executor import Executor
 
@@ -10,7 +10,6 @@ class Orchestrator:
     def __init__(self) -> None:
         self._classifier = RequestClassifier()
         self._executor = Executor()
-        self._aggregator = Aggregator()
 
     async def resolve(self, request: ResolveRequest) -> ResolveResponse:
         start = time.time()
