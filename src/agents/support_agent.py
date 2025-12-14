@@ -21,9 +21,9 @@ SUPPORT_SYSTEM_PROMPT = (
 )
 
 
-def build_support_agent(language: str = "ru") -> Runnable:
+def build_support_agent() -> Runnable:
     """Агент психологической поддержки."""
-    llm = get_llm(language)
+    llm = get_llm()
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", SUPPORT_SYSTEM_PROMPT),

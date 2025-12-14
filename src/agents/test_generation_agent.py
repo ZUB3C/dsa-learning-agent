@@ -32,9 +32,9 @@ TEST_GENERATION_SYSTEM_PROMPT = (
 )
 
 
-def build_test_generation_agent(language: str = "ru") -> Runnable:
+def build_test_generation_agent() -> Runnable:
     """Агент для генерации тестов."""
-    llm = get_llm(language)
+    llm = get_llm()
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", TEST_GENERATION_SYSTEM_PROMPT),

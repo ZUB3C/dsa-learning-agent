@@ -2,7 +2,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 
-from ..core.llm import get_deepseek_llm, get_gigachat_llm
+from ..core.llm import get_llm
 
 VERIFICATION_SYSTEM_PROMPT = (
     "Ты - эксперт по проверке решений задач по алгоритмам и структурам данных.\n"
@@ -28,12 +28,9 @@ VERIFICATION_SYSTEM_PROMPT = (
 )
 
 
-def build_verification_agent(language: str = "ru") -> Runnable:
+def build_verification_agent() -> Runnable:
     """Агент для первичной проверки ответов."""
-    if language.lower() in {"ru", "russian", "русский"}:
-        llm = get_gigachat_llm()
-    else:
-        llm = get_deepseek_llm()
+    llm = get_llm()
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", VERIFICATION_SYSTEM_PROMPT),
@@ -43,13 +40,10 @@ def build_verification_agent(language: str = "ru") -> Runnable:
     return prompt | llm | StrOutputParser()
 
 
-def build_secondary_verification_agent(language: str = "ru") -> Runnable:
+def build_secondary_verification_agent() -> Runnable:
     """Агент для вторичной проверки (другой провайдер для снижения галлюцинаций)."""
     # Используем противоположную модель для перекрестной проверки
-    if language.lower() in {"ru", "russian", "русский"}:
-        llm = get_gigachat_llm()
-    else:
-        llm = get_deepseek_llm()
+    llm = get_llm()
 
     secondary_prompt = ChatPromptTemplate.from_messages([
         (

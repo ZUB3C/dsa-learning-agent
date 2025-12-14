@@ -22,12 +22,12 @@ class LLMRouter:
         """Инициализация роутера с языком по умолчанию."""
         self.default_language = language
 
-    def select_llm(self, language: str | None = None) -> Runnable:
+    @staticmethod
+    def select_llm() -> Runnable:
         """Выбрать подходящую LLM."""
-        lang = language or self.default_language
 
         # Определяем базовую модель по языку
-        return get_llm(lang)
+        return get_llm()
 
     def get_model_name(self, language: str | None = None) -> str:
         """Получить название используемой модели."""
