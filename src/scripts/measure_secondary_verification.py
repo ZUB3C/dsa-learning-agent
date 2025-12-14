@@ -1,13 +1,16 @@
 import argparse
 import asyncio
 import json
-import sys
 from datetime import datetime
 from pathlib import Path
 
 from pydantic import BaseModel
 
 from src.agents.registry import load_agent
+
+# =======================
+# Models
+# =======================
 
 
 class Question(BaseModel):
@@ -17,7 +20,7 @@ class Question(BaseModel):
     expected_answer: str
     user_answer: str
     key_points: list[str]
-    is_correct: bool  # Ground truth
+    is_correct: bool
 
 
 class Topic(BaseModel):
@@ -34,14 +37,13 @@ class TestCollection(BaseModel):
 
 
 class PrimaryEvaluation(BaseModel):
-    verdict: bool  # Изменили is_correct на verdict для согласованности
+    verdict: bool
 
 
 class SecondaryEvaluation(BaseModel):
+    verdict: bool
     agree_with_primary: bool
-    verdict: bool  # Аналогично меняем здесь
-    feedback: str  # Фидбек теперь только от вторичной проверки
-    verification_notes: str | None = None
+    feedback: str
 
 
 class TestVerification(BaseModel):
@@ -59,10 +61,14 @@ class VerificationMetrics(BaseModel):
     agreement_count: int
     disagreement_count: int
     agreement_rate: float
-    # Метрики точности
     primary_accuracy: float
     secondary_accuracy: float
     improvement_rate: float
+    true_positive: int
+    true_negative: int
+    false_positive: int
+    false_negative: int
+    false_positive_rate: float
 
 
 class EffectivenessReport(BaseModel):
@@ -71,278 +77,186 @@ class EffectivenessReport(BaseModel):
     verifications: list[TestVerification]
 
 
+# =======================
+# Verification logic
+# =======================
+
+
 async def verify_answer(
-    question: Question, language: str = "ru"
+    question: Question,
+    language: str = "ru",
 ) -> tuple[PrimaryEvaluation, SecondaryEvaluation]:
-    """Проверяет ответ без передачи is_correct"""
+    primary_agent = load_agent("verification", language=language)
+    primary_raw = await primary_agent.ainvoke({
+        "question": question.question_text,
+        "expected_answer": question.expected_answer,
+        "user_answer": question.user_answer,
+    })
+
     try:
-        # Первичная проверка - теперь возвращает только verdict
-        primary_agent = load_agent("verification", language=language)
-        primary_result = await primary_agent.ainvoke({
-            "question": question.question_text,
-            "expected_answer": question.expected_answer,
-            "user_answer": question.user_answer,
-        })
+        primary_eval = PrimaryEvaluation(**json.loads(primary_raw))
+    except Exception:
+        primary_eval = PrimaryEvaluation(verdict=False)
 
-        try:
-            primary_eval_dict = json.loads(primary_result)
-            # Ожидаем только {"verdict": true/false}
-            primary_eval = PrimaryEvaluation(**primary_eval_dict)
-        except (json.JSONDecodeError, ValueError):
-            # В случае ошибки создаем объект с verdict=False
-            primary_eval = PrimaryEvaluation(verdict=False)
+    secondary_agent = load_agent("verification-secondary", language=language)
+    secondary_raw = await secondary_agent.ainvoke({
+        "primary_verdict": primary_eval.verdict,
+        "question": question.question_text,
+        "user_answer": question.user_answer,
+    })
 
-        # Вторичная проверка
-        secondary_agent = load_agent("verification-secondary", language=language)
-        secondary_result = await secondary_agent.ainvoke({
-            "primary_verdict": primary_eval.verdict,  # Передаем только булево значение
-            "question": question.question_text,
-            "user_answer": question.user_answer,
-        })
-
-        try:
-            secondary_eval_dict = json.loads(secondary_result)
-            secondary_eval = SecondaryEvaluation(**secondary_eval_dict)
-        except (json.JSONDecodeError, ValueError):
-            secondary_eval = SecondaryEvaluation(
-                agree_with_primary=True,
-                verdict=primary_eval.verdict,
-                feedback="Ошибка парсинга ответа судьи",
-                verification_notes="Ошибка парсинга",
-            )
-
-        return primary_eval, secondary_eval  # noqa: TRY300
-
-    except Exception as e:
-        print(f"Ошибка в вопросе {question.question_id}: {e}")
-        return (
-            PrimaryEvaluation(verdict=False),
-            SecondaryEvaluation(
-                agree_with_primary=False,
-                verdict=False,
-                feedback="Системная ошибка при проверке",
-                verification_notes=str(e),
-            ),
+    try:
+        secondary_eval = SecondaryEvaluation(**json.loads(secondary_raw))
+    except Exception:
+        secondary_eval = SecondaryEvaluation(
+            verdict=primary_eval.verdict,
+            agree_with_primary=True,
+            feedback="Ошибка парсинга ответа судьи",
         )
+
+    return primary_eval, secondary_eval
 
 
 async def process_verifications(
-    test_collection: TestCollection, language: str = "ru"
+    test_collection: TestCollection,
+    language: str,
 ) -> list[TestVerification]:
-    """Обрабатывает все вопросы"""
-    verifications = []
-    total = test_collection.total_questions
-    processed = 0
+    results: list[TestVerification] = []
 
     for topic in test_collection.topics:
         for question in topic.questions:
-            processed += 1
-            print(f"[{processed}/{total}] Вопрос {question.question_id}: {topic.topic_name}")
+            primary, secondary = await verify_answer(question, language)
 
-            primary_eval, secondary_eval = await verify_answer(question, language)
-
-            verification = TestVerification(
-                question_id=question.question_id,
-                topic=topic.topic_name,
-                difficulty=question.difficulty,
-                ground_truth=question.is_correct,
-                primary_evaluation=primary_eval,
-                secondary_evaluation=secondary_eval,
-                timestamp=datetime.now().isoformat(),
+            results.append(
+                TestVerification(
+                    question_id=question.question_id,
+                    topic=topic.topic_name,
+                    difficulty=question.difficulty,
+                    ground_truth=question.is_correct,
+                    primary_evaluation=primary,
+                    secondary_evaluation=secondary,
+                    timestamp=datetime.now().isoformat(),
+                )
             )
 
-            verifications.append(verification)
-
-    return verifications
+    return results
 
 
-def calculate_metrics(verifications: list[TestVerification]) -> VerificationMetrics:
-    """Вычисляет метрики без использования баллов"""
-    if not verifications:
-        return VerificationMetrics(
-            total_verifications=0,
-            agreement_count=0,
-            disagreement_count=0,
-            agreement_rate=0.0,
-            primary_accuracy=0.0,
-            secondary_accuracy=0.0,
-            improvement_rate=0.0,
-        )
+# =======================
+# Metrics
+# =======================
 
+
+def calculate_metrics(
+    verifications: list[TestVerification],
+) -> VerificationMetrics:
     total = len(verifications)
-    agreements = sum(1 for v in verifications if v.secondary_evaluation.agree_with_primary)
-    disagreements = total - agreements
 
-    # Точность проверок относительно ground truth
-    primary_correct = sum(
-        1 for v in verifications if v.primary_evaluation.verdict == v.ground_truth
-    )
+    agreement_count = sum(v.secondary_evaluation.agree_with_primary for v in verifications)
+    disagreement_count = total - agreement_count
+
+    primary_correct = sum(v.primary_evaluation.verdict == v.ground_truth for v in verifications)
     secondary_correct = sum(
-        1 for v in verifications if v.secondary_evaluation.verdict == v.ground_truth
+        v.secondary_evaluation.verdict == v.ground_truth for v in verifications
     )
 
-    primary_accuracy = (primary_correct / total) * 100 if total > 0 else 0
-    secondary_accuracy = (secondary_correct / total) * 100 if total > 0 else 0
-    improvement_rate = secondary_accuracy - primary_accuracy
+    tp = sum(v.ground_truth and v.secondary_evaluation.verdict for v in verifications)
+    tn = sum(not v.ground_truth and not v.secondary_evaluation.verdict for v in verifications)
+    fp = sum(not v.ground_truth and v.secondary_evaluation.verdict for v in verifications)
+    fn = sum(v.ground_truth and not v.secondary_evaluation.verdict for v in verifications)
 
     return VerificationMetrics(
         total_verifications=total,
-        agreement_count=agreements,
-        disagreement_count=disagreements,
-        agreement_rate=(agreements / total * 100) if total > 0 else 0,
-        primary_accuracy=primary_accuracy,
-        secondary_accuracy=secondary_accuracy,
-        improvement_rate=improvement_rate,
+        agreement_count=agreement_count,
+        disagreement_count=disagreement_count,
+        agreement_rate=agreement_count / total * 100,
+        primary_accuracy=primary_correct / total * 100,
+        secondary_accuracy=secondary_correct / total * 100,
+        improvement_rate=(secondary_correct - primary_correct) / total * 100,
+        true_positive=tp,
+        true_negative=tn,
+        false_positive=fp,
+        false_negative=fn,
+        false_positive_rate=(fp / (fp + tn) * 100) if (fp + tn) else 0.0,
     )
 
 
-def load_test_collection_from_file(filepath: str) -> TestCollection:
-    """Загружает тестовую коллекцию"""
-    with Path(filepath).open(encoding="utf-8") as f:
-        data = json.load(f)
-
-    topics = []
-    for test in data.get("test_collection", {}).get("tests", []):
-        questions = [Question(**q) for q in test.get("questions", [])]
-        topics.append(
-            Topic(
-                topic_id=test.get("test_id", ""),
-                topic_name=test.get("topic", ""),
-                questions=questions,
-            )
-        )
-
-    return TestCollection(
-        creation_date=data.get("test_collection", {}).get("creation_date", ""),
-        total_questions=data.get("test_collection", {}).get("total_questions", 0),
-        topics_count=data.get("test_collection", {}).get("topics_count", 0),
-        topics=topics,
-    )
+# =======================
+# Report
+# =======================
 
 
 def generate_markdown_report(report: EffectivenessReport) -> str:
-    """Генерирует Markdown отчет с таблицей результатов"""
-    md_lines = [
-        "# Отчет об эффективности вторичной верификации",
-        f"\n**Дата:** {report.report_date}",
-        "\n## Общая статистика\n",
-        f"- **Всего проверок:** {report.overall_metrics.total_verifications}",
-        f"- **Согласие проверок:** {report.overall_metrics.agreement_count} "
-        f"({report.overall_metrics.agreement_rate:.1f}%)",
-        f"- **Расхождения:** {report.overall_metrics.disagreement_count} "
-        f"({100 - report.overall_metrics.agreement_rate:.1f}%)",
-        "\n### 🎯 Точность относительно эталона\n",
-        f"- **Точность первичной проверки:** {report.overall_metrics.primary_accuracy:.1f}%",
-        f"- **Точность вторичной проверки:** {report.overall_metrics.secondary_accuracy:.1f}%",
-        f"- **Улучшение от вторичной проверки:** {report.overall_metrics.improvement_rate:+.1f}%",
+    m = report.overall_metrics
+
+    return f"""# Отчёт об эффективности вторичной проверки
+
+**Дата:** {report.report_date}
+
+## 🎯 Accuracy
+- Primary Accuracy: {m.primary_accuracy:.1f}%
+- Judge Accuracy: {m.secondary_accuracy:.1f}%
+- Improvement Rate: {m.improvement_rate:+.1f}%
+
+## ⚖️ Ошибки судьи
+- False Positive Rate: {m.false_positive_rate:.1f}%
+
+## 🤝 Agreement
+- Agreement Rate: {m.agreement_rate:.1f}%
+- Agreements: {m.agreement_count}
+- Disagreements: {m.disagreement_count}
+
+## 🧮 Confusion Matrix (Judge)
+- TP: {m.true_positive}
+- TN: {m.true_negative}
+- FP: {m.false_positive}
+- FN: {m.false_negative}
+"""
+
+
+# =======================
+# Entrypoint
+# =======================
+
+
+def main(args: argparse.Namespace) -> None:
+    data = json.loads(Path(args.test_data).read_text(encoding="utf-8"))
+
+    topics = [
+        Topic(
+            topic_id=test["test_id"],
+            topic_name=test["topic"],
+            questions=[Question(**q) for q in test["questions"]],
+        )
+        for test in data["test_collection"]["tests"]
     ]
 
-    # Оценка эффективности
-    md_lines.append("\n## Выводы об эффективности\n")
-    if report.overall_metrics.improvement_rate > 5:
-        md_lines.append(
-            "✅ **Высокая эффективность**: Вторичная проверка значительно улучшает точность (>5%)"
-        )
-    elif report.overall_metrics.improvement_rate > 0:
-        md_lines.append(
-            "⚠️ **Умеренная эффективность**: Вторичная проверка дает небольшое улучшение"
-        )
-    else:
-        md_lines.append("❌ **Низкая эффективность**: Вторичная проверка не улучшает результаты")
-
-    # Таблица с подробными результатами
-    md_lines.append("\n## Подробные результаты по вопросам\n")
-    md_lines.append(
-        "| ID | Топик | Сложность | Эталон | Первичная | Вторичная | Согласие | Статус |"
-    )
-    md_lines.append(
-        "|:--:|:------|:---------:|:------:|:---------:|:---------:|:--------:|:------:|"
+    test_collection = TestCollection(
+        creation_date=data["test_collection"]["creation_date"],
+        total_questions=data["test_collection"]["total_questions"],
+        topics_count=data["test_collection"]["topics_count"],
+        topics=topics,
     )
 
-    for v in report.verifications:
-        # Форматирование данных
-        q_id = v.question_id
-        topic = v.topic[:20] + "..." if len(v.topic) > 20 else v.topic
-        difficulty = {"easy": "Легко", "medium": "Средне", "hard": "Сложно"}.get(
-            v.difficulty, v.difficulty
-        )
+    verifications = asyncio.run(process_verifications(test_collection, args.language))
 
-        # Эмодзи для булевых значений
-        ground_truth_emoji = "✓" if v.ground_truth else "✗"
-        # ИСПРАВЛЕНИЕ: используем .verdict вместо .is_correct
-        primary_emoji = "✓" if v.primary_evaluation.verdict else "✗"
-        secondary_emoji = "✓" if v.secondary_evaluation.verdict else "✗"
-        agreement_emoji = "✓" if v.secondary_evaluation.agree_with_primary else "✗"
+    metrics = calculate_metrics(verifications)
 
-        # Определение статуса
-        # ИСПРАВЛЕНИЕ: используем .verdict вместо .is_correct
-        if v.secondary_evaluation.verdict == v.ground_truth:
-            if v.primary_evaluation.verdict == v.ground_truth:
-                status = "🟢"  # Обе правильно
-            else:
-                status = "🟡"  # Вторичная исправила ошибку
-        elif v.primary_evaluation.verdict == v.ground_truth:
-            status = "🔴"  # Вторичная ухудшила
-        else:
-            status = "🔴"  # Обе неправильно
-
-        md_lines.append(
-            f"| {q_id} | {topic} | {difficulty} | {ground_truth_emoji} | "
-            f"{primary_emoji} | {secondary_emoji} | {agreement_emoji} | {status} |"
-        )
-
-    # Легенда
-    md_lines.append("\n### Легенда\n")
-    md_lines.append("- **Эталон**: правильность ответа согласно тестовым данным")
-    md_lines.append("- **Первичная/Вторичная**: оценка нейросети (✓ = правильно, ✗ = неправильно)")
-    md_lines.append("- **Согласие**: согласна ли вторичная проверка с первичной")
-    md_lines.append(
-        "- **Статус**: 🟢 = вторичная корректна, 🟡 = вторичная исправила, 🔴 = ошибка"
-    )
-
-    return "\n".join(md_lines)
-
-
-async def main(args: argparse.Namespace) -> None:
-    print("🔍 Загрузка тестовых данных...")
-    test_collection = load_test_collection_from_file(args.test_data)
-
-    print(f"📊 Найдено {test_collection.total_questions} вопросов\n")
-    print("⚙️ Начинаем верификацию...")
-
-    try:
-        verifications = await process_verifications(test_collection, args.language)
-        print(f"\n✅ Обработано {len(verifications)} вопросов")
-    except Exception as e:
-        print(f"❌ Ошибка: {e}")
-        sys.exit(1)
-
-    # Генерируем отчет
-    overall_metrics = calculate_metrics(verifications)
     report = EffectivenessReport(
         report_date=datetime.now().isoformat(),
-        overall_metrics=overall_metrics,
+        overall_metrics=metrics,
         verifications=verifications,
     )
 
-    markdown = generate_markdown_report(report)
+    output = generate_markdown_report(report)
+    Path(args.output).write_text(output, encoding="utf-8")
 
-    # Сохраняем результаты
-    output_path = Path(args.output)
-    output_path.write_text(markdown, encoding="utf-8")  # noqa: ASYNC240
-    print(f"\n📝 Отчет сохранен: {args.output}")
-
-    # Выводим ключевую метрику
-    print(f"\n🎯 Улучшение от вторичной проверки: {overall_metrics.improvement_rate:+.1f}%")
-    print(f"📊 Точность первичной: {overall_metrics.primary_accuracy:.1f}%")
-    print(f"📊 Точность вторичной: {overall_metrics.secondary_accuracy:.1f}%")
+    print(output)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--test-data", default="test_data_updated.json")
+    parser.add_argument("--test-data", required=True)
     parser.add_argument("--language", default="ru")
     parser.add_argument("--output", default="effectiveness_report.md")
-    args = parser.parse_args()
-
-    asyncio.run(main(args))
+    main(parser.parse_args())
