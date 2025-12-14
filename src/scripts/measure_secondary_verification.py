@@ -84,9 +84,8 @@ class EffectivenessReport(BaseModel):
 
 async def verify_answer(
     question: Question,
-    language: str = "ru",
 ) -> tuple[PrimaryEvaluation, SecondaryEvaluation]:
-    primary_agent = load_agent("verification", language=language)
+    primary_agent = load_agent("verification")
     primary_raw = await primary_agent.ainvoke({
         "question": question.question_text,
         "expected_answer": question.expected_answer,
@@ -98,7 +97,7 @@ async def verify_answer(
     except Exception:
         primary_eval = PrimaryEvaluation(verdict=False)
 
-    secondary_agent = load_agent("verification-secondary", language=language)
+    secondary_agent = load_agent("verification-secondary")
     secondary_raw = await secondary_agent.ainvoke({
         "primary_verdict": primary_eval.verdict,
         "question": question.question_text,
@@ -119,13 +118,12 @@ async def verify_answer(
 
 async def process_verifications(
     test_collection: TestCollection,
-    language: str,
 ) -> list[TestVerification]:
     results: list[TestVerification] = []
 
     for topic in test_collection.topics:
         for question in topic.questions:
-            primary, secondary = await verify_answer(question, language)
+            primary, secondary = await verify_answer(question)
 
             results.append(
                 TestVerification(
@@ -238,7 +236,7 @@ def main(args: argparse.Namespace) -> None:
         topics=topics,
     )
 
-    verifications = asyncio.run(process_verifications(test_collection, args.language))
+    verifications = asyncio.run(process_verifications(test_collection))
 
     metrics = calculate_metrics(verifications)
 
