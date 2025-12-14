@@ -66,7 +66,7 @@ class VectorStoreManager:
 
     def similarity_search_with_score(
         self, query: str, k: int = settings.rag_top_k, filter_dict: dict | None = None
-    ) -> list[Document]:
+    ) -> list[tuple[Document, float]]:
         """Поиск похожих документов."""
         return self.vectorstore.similarity_search_with_score(query=query, k=k, filter=filter_dict)
 
