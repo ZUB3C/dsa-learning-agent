@@ -64,6 +64,12 @@ class VectorStoreManager:
         """Поиск похожих документов."""
         return self.vectorstore.similarity_search(query=query, k=k, filter=filter_dict)
 
+    def similarity_search_with_score(
+        self, query: str, k: int = settings.rag_top_k, filter_dict: dict | None = None
+    ) -> list[Document]:
+        """Поиск похожих документов."""
+        return self.vectorstore.similarity_search_with_score(query=query, k=k, filter=filter_dict)
+
     def delete_collection(self) -> None:
         """Удалить коллекцию."""
         self.client.delete_collection(settings.chroma_collection_name)

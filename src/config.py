@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     # RAG settings
     rag_top_k: int = Field(alias="RAG_TOP_K", default=3)
 
+    # Web Search settings (ReActive Agent)
+    web_search_enabled: bool = Field(alias="WEB_SEARCH_ENABLED", default=True)
+    web_search_provider: str = Field(alias="WEB_SEARCH_PROVIDER", default="4get")
+    web_search_base_url: str = Field(alias="WEB_SEARCH_BASE_URL", default="https://4get.sijh.net")
+    web_search_scraper: str = Field(alias="WEB_SEARCH_SCRAPER", default="google")
+    web_search_results_limit: int = Field(alias="WEB_SEARCH_RESULTS_LIMIT", default=5)
+    web_content_fetch_enabled: bool = Field(alias="WEB_CONTENT_FETCH_ENABLED", default=True)
+    web_content_max_length: int = Field(alias="WEB_CONTENT_MAX_LENGTH", default=5000)
+
     # Database settings
     database_url: str = Field(alias="DATABASE_URL", default="sqlite:///./app_data.db")
 
