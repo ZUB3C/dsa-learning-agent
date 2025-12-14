@@ -186,30 +186,68 @@ def calculate_metrics(
 
 def generate_markdown_report(report: EffectivenessReport) -> str:
     m = report.overall_metrics
+    md_lines = []
 
-    return f"""# Отчёт об эффективности вторичной проверки
+    # ===== Заголовок =====
+    md_lines.append("# Отчёт об эффективности вторичной проверки\n")
+    md_lines.append(f"Дата: {report.report_date}\n")
 
-**Дата:** {report.report_date}
+    # ===== Метрики =====
+    md_lines.append("## 🎯 Accuracy")
+    md_lines.append(f"- Primary Accuracy: {m.primary_accuracy:.1f}%")
+    md_lines.append(f"- Judge Accuracy: {m.secondary_accuracy:.1f}%")
+    md_lines.append(f"- Improvement Rate: {m.improvement_rate:+.1f}%\n")
 
-## 🎯 Accuracy
-- Primary Accuracy: {m.primary_accuracy:.1f}%
-- Judge Accuracy: {m.secondary_accuracy:.1f}%
-- Improvement Rate: {m.improvement_rate:+.1f}%
+    md_lines.append("## ⚖️ Ошибки судьи")
+    md_lines.append(f"- False Positive Rate: {m.false_positive_rate:.1f}%\n")
 
-## ⚖️ Ошибки судьи
-- False Positive Rate: {m.false_positive_rate:.1f}%
+    md_lines.append("## 🤝 Agreement")
+    md_lines.append(f"- Agreement Rate: {m.agreement_rate:.1f}%")
+    md_lines.append(f"- Agreements: {m.agreement_count}")
+    md_lines.append(f"- Disagreements: {m.disagreement_count}\n")
 
-## 🤝 Agreement
-- Agreement Rate: {m.agreement_rate:.1f}%
-- Agreements: {m.agreement_count}
-- Disagreements: {m.disagreement_count}
+    md_lines.append("## 🧮 Confusion Matrix (Judge)")
+    md_lines.append(f"- TP: {m.true_positive}")
+    md_lines.append(f"- TN: {m.true_negative}")
+    md_lines.append(f"- FP: {m.false_positive}")
+    md_lines.append(f"- FN: {m.false_negative}\n")
 
-## 🧮 Confusion Matrix (Judge)
-- TP: {m.true_positive}
-- TN: {m.true_negative}
-- FP: {m.false_positive}
-- FN: {m.false_negative}
-"""
+    # ===== ТАБЛИЦА ПО ТЕСТ-КЕЙСАМ =====
+    md_lines.append("## 📋 Подробная таблица по тест-кейсам\n")
+    md_lines.append("| ID | Топик | Сложность | GT | Primary | Judge | Agree | Error | Status |")
+    md_lines.append("|:--:|:------|:---------:|:--:|:-------:|:-----:|:-----:|:-----:|:------:|")
+
+    for v in report.verifications:
+        gt = "✓" if v.ground_truth else "✗"
+        p = "✓" if v.primary_evaluation.verdict else "✗"
+        j = "✓" if v.secondary_evaluation.verdict else "✗"
+        agree = "✓" if v.secondary_evaluation.agree_with_primary else "✗"
+
+        # Тип ошибки судьи
+        if not v.ground_truth and v.secondary_evaluation.verdict:
+            error = "FP"
+        elif v.ground_truth and not v.secondary_evaluation.verdict:
+            error = "FN"
+        else:
+            error = ""
+
+        # Статус
+        if v.secondary_evaluation.verdict == v.ground_truth:
+            if v.primary_evaluation.verdict == v.ground_truth:
+                status = "🟢 OK"
+            else:
+                status = "🟡 Fixed"
+        elif v.primary_evaluation.verdict == v.ground_truth:
+            status = "🔴 Broke"
+        else:
+            status = "⚫️ Both wrong"
+
+        md_lines.append(
+            f"| {v.question_id} | {v.topic} | {v.difficulty} | "
+            f"{gt} | {p} | {j} | {agree} | {error} | {status} |"
+        )
+
+    return "\n".join(md_lines)
 
 
 # =======================
