@@ -181,6 +181,7 @@ class MaterialGeneration(Base):
     final_completeness_score = Column(Float, nullable=False)
     documents_collected = Column(Integer, nullable=False)
     material_length = Column(Integer, nullable=False)
+    material_content = Column(Text, nullable=True)
 
     # Performance
     generation_time_seconds = Column(Float, nullable=False)

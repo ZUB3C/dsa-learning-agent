@@ -16,9 +16,9 @@ from src.core.memory.memory_schemas import MemoryContext
 from src.core.memory_manager import MemoryManager
 from src.exceptions import LLMUnavailableError
 from src.models.react_schemas import NodeStatus, ToTResult, TreeNode
-from src.tools.base_tool import ToolResult
+from src.tools.base_tool import Document, ToolResult
 from src.tools.tool_registry import ToolRegistry
-
+from src.utils.logging_decorators import log_function_call, log_llm_call, log_tool_execution
 logger = logging.getLogger(__name__)
 
 
@@ -62,28 +62,15 @@ class ToTOrchestrator:
 
         logger.info("✅ ToT Orchestrator initialized")
 
+    @log_function_call("materials_agent")
     async def search(
         self, query: str, user_level: str, memory_context: MemoryContext
     ) -> ToTResult:
-        """
-        DFS поиск в дереве рассуждений.
-        Code from Section 4.2 of architecture.
-
-        Args:
-            query: User query
-            user_level: User level (beginner/intermediate/advanced)
-            memory_context: Memory context with hints
-
-        Returns:
-            ToTResult with best_path and collected_documents
-        """
+        """DFS поиск в дереве рассуждений."""
 
         start_time = time.time()
 
-        # ═══════════════════════════════════════════════════════════
         # PHASE 1: INITIALIZATION
-        # ═══════════════════════════════════════════════════════════
-
         root = TreeNode(
             node_id="root",
             depth=0,
@@ -92,35 +79,34 @@ class ToTOrchestrator:
             completeness_score=0.0,
         )
 
-        stack = [root]  # DFS stack (LIFO)
+        stack = [root]
         best_solution = None
         best_score = 0.0
         explored_nodes = []
 
-        # Tracking
         llm_calls = {"gigachat2": 0, "gigachat3": 0}
         tools_used = set()
+
+        # ═══════════════════════════════════════════════════════════
+        # FIX: Add tool usage tracking to prevent loops
+        # ═══════════════════════════════════════════════════════════
+
+        recent_tools = []  # Track last N tools used
+        max_repeated_tools = 2  # Max times same tool can be used consecutively
 
         logger.info("🌳 ToT DFS Search started:")
         logger.info(f"   - Query: '{query}'")
         logger.info(f"   - Max depth: {self.max_depth}")
-        logger.info(f"   - Completeness threshold: {self.completeness_threshold}")
 
-        # ═══════════════════════════════════════════════════════════
         # PHASE 2: DFS LOOP
-        # ═══════════════════════════════════════════════════════════
-
         iteration = 0
         max_iterations = self.max_depth * self.branching_factor
 
         while stack and iteration < max_iterations:
             iteration += 1
 
-            # ───────────────────────────────────────────────────────
-            # STEP 2.1: POP NODE FROM STACK
-            # ───────────────────────────────────────────────────────
-
-            current_node = stack.pop()  # LIFO: last added, first explored
+            # STEP 2.1: POP NODE
+            current_node = stack.pop()
             explored_nodes.append(current_node)
 
             logger.info(f"📍 Iteration {iteration}: Exploring node {current_node.node_id}")
@@ -128,18 +114,13 @@ class ToTOrchestrator:
             logger.info(f"   - Completeness: {current_node.completeness_score:.2f}")
             logger.info(f"   - Documents: {len(current_node.collected_info)}")
 
-            # ───────────────────────────────────────────────────────
-            # STEP 2.2: CHECK TERMINATION CONDITIONS
-            # ───────────────────────────────────────────────────────
-
-            # Goal reached?
+            # STEP 2.2: CHECK TERMINATION
             if current_node.completeness_score >= self.completeness_threshold:
                 logger.info(f"🎯 GOAL REACHED at node {current_node.node_id}!")
                 current_node.status = NodeStatus.GOAL_REACHED
                 best_solution = current_node
                 break
 
-            # Max depth reached?
             if current_node.depth >= self.max_depth:
                 logger.info(f"⚠️ Max depth reached at node {current_node.node_id}")
                 if current_node.completeness_score > best_score:
@@ -147,14 +128,13 @@ class ToTOrchestrator:
                     best_solution = current_node
                 continue
 
-            # Dead end from previous evaluation?
             if current_node.status == NodeStatus.DEAD_END:
                 logger.info(f"💀 Dead end detected, skipping {current_node.node_id}")
                 continue
 
-            # ───────────────────────────────────────────────────────
-            # STEP 2.3: GENERATE CANDIDATE THOUGHTS (GigaChat-2-Max)
-            # ───────────────────────────────────────────────────────
+            # ═══════════════════════════════════════════════════════
+            # STEP 2.3: GENERATE CANDIDATE THOUGHTS
+            # ═══════════════════════════════════════════════════════
 
             try:
                 candidates = await self.reasoning_chain.generate_thoughts(
@@ -166,13 +146,67 @@ class ToTOrchestrator:
                 )
 
                 llm_calls["gigachat2"] += 1
-
                 logger.info(f"💭 Generated {len(candidates)} candidate thoughts")
+
+                # ═══════════════════════════════════════════════════
+                # FIX: Check for tool repetition and force diversity
+                # ═══════════════════════════════════════════════════
+
+                # Check if we're stuck in a loop
+                if len(recent_tools) >= max_repeated_tools:
+                    last_tools = recent_tools[-max_repeated_tools:]
+
+                    # If same tool used N times in a row
+                    if len(set(last_tools)) == 1:
+                        repeated_tool = last_tools[0]
+                        logger.warning(
+                            f"⚠️ Loop detected: '{repeated_tool}' used "
+                            f"{max_repeated_tools}x consecutively"
+                        )
+
+                        # Force switch to web_search if not already using it
+                        if repeated_tool != "web_search":
+                            logger.info(
+                                f"🔄 Forcing switch from '{repeated_tool}' to 'web_search'"
+                            )
+
+                            # Create forced web_search node
+                            forced_node = TreeNode(
+                                parent_id=current_node.node_id,
+                                depth=current_node.depth + 1,
+                                thought=(
+                                    f"Переключаюсь на веб-поиск после "
+                                    f"{max_repeated_tools} попыток с '{repeated_tool}'"
+                                ),
+                                reasoning=(
+                                    f"RAG не дал результатов после {max_repeated_tools} "
+                                    f"попыток, пробую поискать в интернете"
+                                ),
+                                planned_action={
+                                    "tool_name": "web_search",
+                                    "tool_params": {
+                                        "query": query,
+                                        "num_results": 5,
+                                        "scrape_content": True,
+                                    },
+                                },
+                                collected_info=current_node.collected_info.copy(),
+                                promise_score=0.95,  # Very high promise to prioritize
+                            )
+
+                            # Replace first candidate with forced action
+                            if candidates:
+                                candidates[0] = forced_node
+                                logger.info("✅ Injected web_search with high priority")
+                        else:
+                            # Already using web_search repetitively, try other tools
+                            logger.warning("⚠️ web_search also not helping, will try other tools")
+
+                        # Clear history to allow fresh start
+                        recent_tools = []
 
             except LLMUnavailableError as e:
                 logger.exception(f"❌ GigaChat-2-Max unavailable: {e}")
-
-                # Fallback: Rule-based thought generation
                 candidates = self._fallback_thoughts(current_node)
                 logger.warning(f"⚠️ Using fallback: {len(candidates)} rule-based thoughts")
 
@@ -180,10 +214,7 @@ class ToTOrchestrator:
                 logger.warning(f"⚠️ No candidates generated for {current_node.node_id}")
                 continue
 
-            # ───────────────────────────────────────────────────────
-            # STEP 2.4: EVALUATE PROMISE (GigaChat3)
-            # ───────────────────────────────────────────────────────
-
+            # STEP 2.4: EVALUATE PROMISE
             for candidate in candidates:
                 try:
                     promise_score = await self.evaluation_chain.evaluate_promise(
@@ -196,11 +227,7 @@ class ToTOrchestrator:
                     logger.warning(f"⚠️ Promise evaluation failed: {e}, using heuristic")
                     candidate.promise_score = self.evaluation_chain._heuristic_promise(candidate)
 
-            # ───────────────────────────────────────────────────────
             # STEP 2.5: PRUNE & SORT
-            # ───────────────────────────────────────────────────────
-
-            # Prune low-promise branches
             promising = [c for c in candidates if c.promise_score >= self.promise_threshold]
 
             if not promising:
@@ -208,7 +235,6 @@ class ToTOrchestrator:
                 current_node.status = NodeStatus.DEAD_END
                 continue
 
-            # Sort by promise (best first)
             promising.sort(key=lambda c: c.promise_score, reverse=True)
 
             logger.info(f"✂️ Pruned {len(candidates) - len(promising)} low-promise branches")
@@ -216,49 +242,51 @@ class ToTOrchestrator:
                 f"📊 Top promise scores: {[round(c.promise_score, 2) for c in promising[:3]]}"
             )
 
-            # ───────────────────────────────────────────────────────
-            # STEP 2.6: PUSH TO STACK (DFS order)
-            # ───────────────────────────────────────────────────────
-
-            # Add to stack in REVERSE order (best goes last, popped first)
+            # STEP 2.6: PUSH TO STACK
             for child in reversed(promising):
                 child.parent_id = current_node.node_id
                 child.depth = current_node.depth + 1
-                child.collected_info = current_node.collected_info.copy()  # Inherit
+                child.collected_info = current_node.collected_info.copy()
                 stack.append(child)
                 current_node.children.append(child)
 
             logger.info(f"📚 Added {len(promising)} nodes to stack (size: {len(stack)})")
 
-            # ───────────────────────────────────────────────────────
+            # ═══════════════════════════════════════════════════════
             # STEP 2.7: EXECUTE ACTION FOR BEST CHILD
-            # ───────────────────────────────────────────────────────
+            # ═══════════════════════════════════════════════════════
 
-            # Take best child (just added to end of stack)
             best_child = stack[-1]
-
             tool_name = best_child.planned_action.get("tool_name")
+
             logger.info(f"🎬 Executing action: {tool_name}")
+
+            # ═══════════════════════════════════════════════════════
+            # FIX: Track tool usage BEFORE execution
+            # ═══════════════════════════════════════════════════════
+
+            recent_tools.append(tool_name)
+
+            # Keep only last N+2 tools in history
+            if len(recent_tools) > max_repeated_tools + 2:
+                recent_tools.pop(0)
+
+            logger.debug(f"📊 Recent tools: {recent_tools}")
 
             try:
                 # Execute tool
                 tool_result = await self._execute_tool(best_child.planned_action)
                 best_child.action_result = tool_result
-
                 tools_used.add(tool_name)
 
-                # ⚠️ CRITICAL: Content Guard для результатов
+                # Content Guard
                 if tool_result.success and tool_result.documents:
                     logger.info(f"🛡️ Running Content Guard on {len(tool_result.documents)} docs")
-
                     cleaned_docs = await self.content_guard.process(tool_result.documents)
-
                     logger.info(
                         f"✅ Content Guard: {len(tool_result.documents)} → "
                         f"{len(cleaned_docs)} docs passed"
                     )
-
-                    # Update with cleaned documents
                     best_child.collected_info.extend(cleaned_docs)
                     tool_result.documents = cleaned_docs
 
@@ -267,10 +295,7 @@ class ToTOrchestrator:
                 best_child.status = NodeStatus.DEAD_END
                 continue
 
-            # ───────────────────────────────────────────────────────
-            # STEP 2.8: POST-EXECUTION EVALUATION (GigaChat3)
-            # ───────────────────────────────────────────────────────
-
+            # STEP 2.8: POST-EXECUTION EVALUATION
             try:
                 evaluation = await self.evaluation_chain.evaluate_node(
                     node=best_child, query=query
@@ -308,7 +333,7 @@ class ToTOrchestrator:
                 best_child.completeness_score = self.evaluation_chain._heuristic_completeness(
                     best_child
                 )
-                best_child.relevance_score = 0.8  # Assume good
+                best_child.relevance_score = 0.8
                 best_child.quality_score = 0.8
                 best_child.status = NodeStatus.PROMISING
 
@@ -317,6 +342,21 @@ class ToTOrchestrator:
                 best_score = best_child.completeness_score
                 best_solution = best_child
 
+            # STEP 2.9: SAVE TO WORKING MEMORY
+            await self.memory_manager.working_memory.append_step(
+                session_id=memory_context.session_id,
+                step_data={
+                    "iteration": iteration,
+                    "node_id": best_child.node_id,
+                    "depth": best_child.depth,
+                    "thought": best_child.thought,
+                    "tool_used": tool_name,
+                    "tool_params": best_child.planned_action.get("tool_params"),
+                    "completeness": best_child.completeness_score,
+                    "relevance": best_child.relevance_score,
+                    "timestamp": best_child.created_at.isoformat(),
+                },
+            )
             # ───────────────────────────────────────────────────────
             # STEP 2.9: SAVE TO WORKING MEMORY
             # ───────────────────────────────────────────────────────
@@ -335,13 +375,12 @@ class ToTOrchestrator:
                     "timestamp": best_child.created_at.isoformat(),
                 },
             )
-
         # ═══════════════════════════════════════════════════════════
-        # PHASE 3: RETURN BEST SOLUTION
+        # PHASE 3: PREPARE RESULT
         # ═══════════════════════════════════════════════════════════
 
         if not best_solution:
-            # No goal reached, take best completeness
+            # No goal reached, take best by completeness
             best_solution = max(explored_nodes, key=lambda n: n.completeness_score)
             logger.warning(
                 f"⚠️ No goal reached, using best: {best_solution.completeness_score:.2f}"
@@ -350,25 +389,61 @@ class ToTOrchestrator:
         # Trace path from root to best solution
         best_path = self._trace_path(best_solution)
 
-        # Calculate total time
         total_time = time.time() - start_time
 
-        logger.info("✅ DFS Search complete:")
-        logger.info(f"   - Total iterations: {iteration}")
-        logger.info(f"   - Explored nodes: {len(explored_nodes)}")
-        logger.info(f"   - Best path length: {len(best_path)}")
-        logger.info(f"   - Final completeness: {best_solution.completeness_score:.2f}")
-        logger.info(f"   - Documents collected: {len(best_solution.collected_info)}")
-        logger.info(f"   - Tools used: {list(tools_used)}")
+        # ═══════════════════════════════════════════════════════════
+        # FIX: Convert CleanDocument to Document
+        # ═══════════════════════════════════════════════════════════
+
+        collected_documents = []
+
+        for doc in best_solution.collected_info:
+            # Check if it's CleanDocument (from Content Guard)
+            if hasattr(doc, "__class__") and doc.__class__.__name__ == "CleanDocument":
+                # Convert CleanDocument to Document
+                converted_doc = Document(
+                    page_content=doc.page_content,
+                    metadata={
+                        **doc.metadata,
+                        # Add Content Guard metadata
+                        "content_guarded": True,
+                        "toxicity_score": getattr(doc, "toxicity_score", 0.0),
+                        "policy_compliant": getattr(doc, "policy_compliant", True),
+                        "sanitized": getattr(doc, "sanitized", True),
+                        "quality_passed": getattr(doc, "quality_passed", True),
+                    },
+                )
+                collected_documents.append(converted_doc)
+            elif isinstance(doc, Document):
+                # Already Document, use as-is
+                collected_documents.append(doc)
+            else:
+                # Unknown type, try to convert
+                try:
+                    converted_doc = Document(page_content=str(doc), metadata={})
+                    collected_documents.append(converted_doc)
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to convert document: {e}")
+
+        logger.info("=" * 80)
+        logger.info("🎯 DFS SEARCH COMPLETE")
+        logger.info("=" * 80)
+        logger.info(f"📊 Total iterations: {iteration}")
+        logger.info(f"🌳 Explored nodes: {len(explored_nodes)}")
+        logger.info(f"📍 Best path length: {len(best_path)}")
+        logger.info(f"✅ Final completeness: {best_solution.completeness_score:.2f}")
+        logger.info(f"📚 Documents collected: {len(collected_documents)}")
+        logger.info(f"🔧 Tools used: {list(tools_used)}")
         logger.info(
-            f"   - LLM calls: GigaChat-2-Max={llm_calls['gigachat2']}, GigaChat3={llm_calls['gigachat3']}"
+            f"🤖 LLM calls: GigaChat-2-Max={llm_calls['gigachat2']}, GigaChat3={llm_calls['gigachat3']}"
         )
-        logger.info(f"   - Total time: {total_time:.2f}s")
+        logger.info(f"⏱️ Total time: {total_time:.2f}s")
+        logger.info("=" * 80)
 
         return ToTResult(
             best_path=best_path,
             explored_nodes=explored_nodes,
-            collected_documents=best_solution.collected_info,
+            collected_documents=collected_documents,  # Now all are Document objects
             final_completeness=best_solution.completeness_score,
             iterations=iteration,
             tools_used=list(tools_used),

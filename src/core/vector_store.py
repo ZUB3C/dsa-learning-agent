@@ -71,14 +71,95 @@ class VectorStoreManager:
         """Поиск похожих документов."""
         return self.vectorstore.similarity_search_with_score(query=query, k=k, filter=filter_dict)
 
-    def delete_collection(self) -> None:
-        """Удалить коллекцию."""
-        self.client.delete_collection(settings.vector_store.collection_name)
+    def get_collection(self, collection_name: str | None = None) -> chromadb.Collection:
+        """
+        Получить ChromaDB коллекцию по имени.
 
-    def get_collection_info(self) -> dict:
-        """Получить информацию о коллекции."""
+        Args:
+            collection_name: Имя коллекции (optional, default: from settings)
+
+        Returns:
+            ChromaDB Collection object
+
+        Raises:
+            ValueError: If collection doesn't exist
+
+        Example:
+            >>> collection = vector_store.get_collection("aisd_materials")
+            >>> results = collection.get(limit=100)
+        """
+
+        if collection_name is None:
+            collection_name = settings.vector_store.collection_name
+
         try:
-            collection = self.client.get_collection(settings.vector_store.collection_name)
+            return self.client.get_collection(collection_name)
+        except Exception as e:
+            raise ValueError(f"Collection '{collection_name}' not found: {e}")
+
+    def get_or_create_collection(
+        self, collection_name: str, embedding_function=None
+    ) -> chromadb.Collection:
+        """
+        Получить существующую или создать новую коллекцию.
+
+        Args:
+            collection_name: Имя коллекции
+            embedding_function: Функция эмбеддингов (optional)
+
+        Returns:
+            ChromaDB Collection object
+        """
+
+        try:
+            return self.client.get_collection(collection_name)
+        except Exception:
+            # Collection doesn't exist, create it
+            return self.client.create_collection(
+                name=collection_name,
+                embedding_function=embedding_function,
+            )
+
+    def list_collections(self) -> list[str]:
+        """
+        Получить список всех коллекций.
+
+        Returns:
+            List of collection names
+        """
+
+        collections = self.client.list_collections()
+        return [col.name for col in collections]
+
+    def delete_collection(self, collection_name: str | None = None) -> None:
+        """
+        Удалить коллекцию.
+
+        Args:
+            collection_name: Имя коллекции (optional, default: from settings)
+        """
+
+        if collection_name is None:
+            collection_name = settings.vector_store.collection_name
+
+        self.client.delete_collection(collection_name)
+
+    def get_collection_info(self, collection_name: str | None = None) -> dict:
+        """
+        Получить информацию о коллекции.
+
+        Args:
+            collection_name: Имя коллекции (optional, default: from settings)
+
+        Returns:
+            Dict with collection info
+        """
+
+        if collection_name is None:
+            collection_name = settings.vector_store.collection_name
+
+        try:
+            collection = self.client.get_collection(collection_name)
             return {
                 "name": collection.name,
                 "count": collection.count(),
@@ -87,14 +168,25 @@ class VectorStoreManager:
         except Exception as e:
             return {"error": str(e), "count": 0}
 
-    def collection_exists(self) -> bool:
-        """Проверить существование коллекции."""
+    def collection_exists(self, collection_name: str | None = None) -> bool:
+        """
+        Проверить существование коллекции.
+
+        Args:
+            collection_name: Имя коллекции (optional, default: from settings)
+
+        Returns:
+            True if collection exists
+        """
+
+        if collection_name is None:
+            collection_name = settings.vector_store.collection_name
+
         try:
-            self.client.get_collection(settings.vector_store.collection_name)
+            self.client.get_collection(collection_name)
+            return True
         except Exception:
             return False
-        else:
-            return True
 
 
 # Глобальный экземпляр

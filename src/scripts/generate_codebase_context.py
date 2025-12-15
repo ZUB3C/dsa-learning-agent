@@ -12,8 +12,8 @@ try:
 
     TIKTOKEN_AVAILABLE = True
 except ImportError:
+    tiktoken = None  # type: ignore[assignment]
     TIKTOKEN_AVAILABLE = False
-
 
 # Files to exclude from output (relative to project root)
 EXCLUDE_FILES = [
@@ -21,7 +21,7 @@ EXCLUDE_FILES = [
 ]
 
 # Files outside src/ to forcefully include (relative to project root)
-INCLUDE_EXTERNAL_FILES = [
+INCLUDE_EXTERNAL_FILES: list[str] = [
     "README.md",
 ]
 
@@ -160,6 +160,10 @@ def read_external_files(project_root: Path) -> list[dict[str, str]]:
 
 def count_tokens(text: str, model: str = "claude-sonnet-4-5") -> int:
     """Offline token counting for Claude models (approximation)."""
+    if not TIKTOKEN_AVAILABLE or tiktoken is None:
+        # Fallback: ~4 chars per token
+        return len(text) // 4
+
     if "claude" in model.lower():
         # Use p50k_base encoding as approximation for Claude
         try:
@@ -211,7 +215,7 @@ def main() -> None:
     print("Filtering: Only .py files, excluding __pycache__")
     print(f"Excluded files: {', '.join(EXCLUDE_FILES) if EXCLUDE_FILES else 'None'}")
     print(
-        f"External files: {
+        f"External files: {"
             ', '.join(INCLUDE_EXTERNAL_FILES) if INCLUDE_EXTERNAL_FILES else 'None'
         }\n"
     )

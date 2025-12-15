@@ -180,7 +180,7 @@ class ContentGuardOrchestrator:
 
         for doc in documents:
             clean_doc = CleanDocument(
-                content=doc.page_content,
+                page_content=doc.page_content,
                 metadata=doc.metadata,
                 source=doc.source,
                 content_guarded=True,
@@ -229,7 +229,7 @@ class ContentGuardOrchestrator:
 
         return [
             CleanDocument(
-                content=doc.page_content,
+                page_content=doc.page_content,
                 metadata=doc.metadata,
                 source=doc.source,
                 content_guarded=False,

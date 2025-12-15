@@ -378,7 +378,7 @@ class ToTSearchMetrics(BaseModel):
     final_completeness: float
 
     # Tool usage
-    tools_used: List[str]
+    tools_used: list[str]
     tool_call_counts: dict[str, int]
 
     # LLM usage
@@ -415,18 +415,18 @@ class GenerateMaterialV2Response(BaseModel):
     word_count: int
 
     # Sources
-    sources: List[MaterialSource]
+    sources: list[MaterialSource]
     documents_collected: int
 
     # ToT metrics
     tot_metrics: ToTSearchMetrics
 
     # Best path (optional, for debugging)
-    best_path: List[ToTNodeInfo] | None = None
+    best_path: list[ToTNodeInfo] | None = None
 
     # Warnings/errors
-    warnings: List[str] = []
-    fallbacks_used: List[str] = []
+    warnings: list[str] = []
+    fallbacks_used: list[str] = []
 
 
 class GetGenerationStatusRequest(BaseModel):
@@ -517,7 +517,7 @@ class GenerationLogEntry(BaseModel):
 class GetLogsResponse(BaseModel):
     """Response with generation logs."""
 
-    logs: List[GenerationLogEntry]
+    logs: list[GenerationLogEntry]
     total_count: int
     page: int
     page_size: int

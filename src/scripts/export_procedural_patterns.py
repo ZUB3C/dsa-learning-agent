@@ -2,7 +2,6 @@
 Export procedural patterns to JSON for backup.
 """
 
-import asyncio
 import json
 import logging
 import pathlib
@@ -14,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-async def export_patterns(output_file: str = "procedural_patterns_backup.json") -> None:
+def export_patterns(output_file: str = "procedural_patterns_backup.json") -> None:
     """
     Export procedural patterns to JSON.
 
@@ -43,9 +42,13 @@ async def export_patterns(output_file: str = "procedural_patterns_backup.json") 
 
         for metadata in all_results["metadatas"]:
             pattern_json = metadata.get("pattern_json")
-            if pattern_json:
-                pattern = json.loads(pattern_json)
-                patterns.append(pattern)
+            if pattern_json and isinstance(pattern_json, str):
+                try:
+                    pattern = json.loads(pattern_json)
+                    patterns.append(pattern)
+                except json.JSONDecodeError:
+                    logger.warning(f"Failed to parse pattern_json: {pattern_json[:100]}")
+                    continue
 
         # Export
         backup = {
@@ -68,4 +71,4 @@ if __name__ == "__main__":
 
     output = sys.argv[1] if len(sys.argv) > 1 else "procedural_patterns_backup.json"
 
-    asyncio.run(export_patterns(output))
+    export_patterns(output)

@@ -137,7 +137,7 @@ async def generate_material_v2(
 
     # Format collected documents
     documents_text = "\n\n---\n\n".join([
-        f"[{doc.metadata.get('source', 'unknown')}]\n{doc.content}"
+        f"[{doc.metadata.get('source', 'unknown')}]\n{doc.page_content}"
         for doc in tot_result.collected_documents[:10]  # Top 10
     ])
 
@@ -152,7 +152,7 @@ async def generate_material_v2(
 
     try:
         response = await llm_expensive.ainvoke(final_prompt)
-        final_material = response.content
+        final_material = response.text
 
         logger.info(f"✅ Final material generated: {len(final_material)} chars")
 
@@ -200,6 +200,7 @@ async def generate_material_v2(
         final_completeness_score=tot_result.final_completeness,
         documents_collected=len(tot_result.collected_documents),
         material_length=len(final_material),
+        material_content=final_material,
         generation_time_seconds=tot_result.total_time,
         memory_hints_used=len(memory_context.patterns) > 0,
         content_guard_filtered=0,  # TODO: Track this
@@ -310,8 +311,8 @@ async def get_generation_status(generation_id: str, db: Annotated[AsyncSession, 
 
     return GetGenerationStatusResponse(
         generation_id=generation_id,
-        status="completed" if record.success else "failed",
+        status="completed" if record.success else "failed",  # pyright: ignore[reportGeneralTypeIssues]
         progress=1.0,
-        current_iteration=record.tot_iterations,
+        current_iteration=record.tot_iterations,  # pyright: ignore[reportArgumentType]
         estimated_time_remaining=0.0,
     )

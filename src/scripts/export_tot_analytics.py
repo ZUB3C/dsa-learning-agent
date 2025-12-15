@@ -2,7 +2,6 @@
 Export ToT analytics to various formats (JSON, CSV, HTML report).
 """
 
-import asyncio
 import csv
 import json
 import logging
@@ -17,7 +16,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-async def export_to_json(
+def export_to_json(
     generations: list[MaterialGeneration], output_file: str = "tot_analytics.json"
 ) -> None:
     """
@@ -65,7 +64,7 @@ async def export_to_json(
     logger.info(f"✅ Exported {len(generations)} generations to {output_file}")
 
 
-async def export_to_csv(
+def export_to_csv(
     generations: list[MaterialGeneration], output_file: str = "tot_analytics.csv"
 ) -> None:
     """
@@ -131,7 +130,7 @@ async def export_to_csv(
     logger.info(f"✅ Exported {len(generations)} generations to {output_file}")
 
 
-async def export_to_html_report(
+def export_to_html_report(
     generations: list[MaterialGeneration], output_file: str = "tot_analytics_report.html"
 ) -> None:
     """
@@ -150,7 +149,7 @@ async def export_to_html_report(
 
     # Calculate statistics
     total = len(generations)
-    successful = sum(1 for g in generations if g.success)
+    successful = sum(1 for g in generations if g.success is True)
 
     avg_completeness = sum(g.final_completeness_score for g in generations) / total
     avg_iterations = sum(g.tot_iterations for g in generations) / total
@@ -291,8 +290,8 @@ async def export_to_html_report(
 
     # Add last 20 generations
     for gen in generations[-20:]:
-        status_class = "success" if gen.success else "failed"
-        status_text = "✅ Success" if gen.success else "❌ Failed"
+        status_class = "success" if gen.success is True else "failed"
+        status_text = "✅ Success" if gen.success is True else "❌ Failed"
 
         html += f"""
             <tr>
@@ -350,7 +349,7 @@ async def main() -> None:
             .where(MaterialGeneration.created_at >= start_date)
             .order_by(MaterialGeneration.created_at)
         )
-        generations = result.scalars().all()
+        generations = list(result.scalars().all())
 
     if not generations:
         logger.warning("⚠️ No generations found in specified period")
@@ -367,14 +366,14 @@ async def main() -> None:
 
     # Export
     if format_arg in {"json", "all"}:
-        await export_to_json(generations, output_dir / f"tot_analytics_{timestamp}.json")
+        export_to_json(generations, str(output_dir / f"tot_analytics_{timestamp}.json"))
 
     if format_arg in {"csv", "all"}:
-        await export_to_csv(generations, output_dir / f"tot_analytics_{timestamp}.csv")
+        export_to_csv(generations, str(output_dir / f"tot_analytics_{timestamp}.csv"))
 
     if format_arg in {"html", "all"}:
-        await export_to_html_report(
-            generations, output_dir / f"tot_analytics_report_{timestamp}.html"
+        export_to_html_report(
+            generations, str(output_dir / f"tot_analytics_report_{timestamp}.html")
         )
 
     logger.info("")
@@ -384,4 +383,6 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    import asyncio
+
     asyncio.run(main())

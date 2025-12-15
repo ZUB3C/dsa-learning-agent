@@ -86,7 +86,7 @@ class LLMFallbackHandler:
             try:
                 response = await fallback_llm.ainvoke(prompt, **kwargs)
                 logger.info("✅ Fallback LLM succeeded")
-                return response.content
+                return response.page_content
             except Exception as e:
                 logger.exception(f"❌ Fallback LLM also failed: {e}")
 

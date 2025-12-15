@@ -14,13 +14,13 @@ from starlette.responses import Response
 
 from src.config import get_settings
 from src.core.database import init_db
+from src.core.logging_handler import setup_database_logging, get_db_handler
 from src.routers import (
     health,
     materials,  # v1 (legacy)
     materials_v2,  # v2 (new)
 )
 
-from .core.database import init_database
 from .routers import assessment, health, llm_router, materials, support, tests, verification
 
 app = FastAPI(
@@ -45,12 +45,40 @@ async def latency_header(request: Request, call_next: RequestResponseEndpoint) -
     resp = await call_next(request)
     resp.headers["X-Process-Time"] = f"{time.time() - start:.3f}"
     return resp
+# Middleware для установки контекста логирования
+@app.middleware("http")
+async def logging_context_middleware(request: Request, call_next):
+    """Set logging context for each request."""
+    import uuid
 
+    request_id = str(uuid.uuid4())
+    user_id = request.headers.get("X-User-ID")
+    session_id = request.headers.get("X-Session-ID")
+
+    # Set context in database handler
+    db_handler = get_db_handler()
+    if db_handler:
+        db_handler.set_context(
+            request_id=request_id,
+            user_id=user_id,
+            session_id=session_id,
+        )
+
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        # Clear context after request
+        if db_handler:
+            db_handler.clear_context()
 
 @app.on_event("startup")
-async def startup_event() -> None:  # noqa: RUF029
+async def startup_event() -> None:
     """Инициализация при запуске."""
-    init_database()
+    await init_db()
+    # Setup database logging
+    setup_database_logging(level=logging.INFO)
+    logger.info("Database logging initialized")
 
 
 # Configure logging

@@ -13,6 +13,7 @@ from src.config import get_settings
 from src.core.llm import get_llm
 from src.core.vector_store import vector_store_manager
 from src.exceptions import ChromaDBUnavailableError
+from src.retrieval.tfidf_retriever import get_tfidf_retriever
 from src.tools.base_tool import BaseTool, Document, ToolResult
 
 logger = logging.getLogger(__name__)
@@ -47,8 +48,12 @@ class AdaptiveRAGTool(BaseTool):
         super().__init__()
         self.settings = get_settings()
         self.vector_store = vector_store_manager
-        self.tfidf_retriever = None  # Lazy init
-        self.llm_classifier = get_llm(use_gigachat3=True)
+
+        # ═══════════════════════════════════════════════════════════
+        # FIX: Initialize TF-IDF retriever and fix typo
+        # ═══════════════════════════════════════════════════════════
+        self.tfidf_retriever = get_tfidf_retriever()
+        self.llm_classifier = get_llm(use_gigachat3=True)  # Fixed typo
 
     async def execute(self, params: dict[str, Any]) -> ToolResult:
         """Execute adaptive RAG search."""
@@ -63,18 +68,12 @@ class AdaptiveRAGTool(BaseTool):
 
         logger.info(f"🔍 Adaptive RAG: query='{query[:50]}...', strategy={strategy}, k={k}")
 
-        # ═══════════════════════════════════════════════════════════
         # STEP 1: STRATEGY SELECTION
-        # ═══════════════════════════════════════════════════════════
-
         if strategy == "auto":
             strategy = await self._classify_query_complexity(query)
             logger.info(f"🔍 Auto-selected strategy: {strategy}")
 
-        # ═══════════════════════════════════════════════════════════
         # STEP 2: RETRIEVAL
-        # ═══════════════════════════════════════════════════════════
-
         try:
             if strategy == "tfidf":
                 documents = await self._tfidf_search(query, k)
@@ -131,10 +130,7 @@ class AdaptiveRAGTool(BaseTool):
         Uses: Rule-based (fast) + GigaChat3 fallback (accurate)
         """
 
-        # ───────────────────────────────────────────────────────────
         # METHOD 1: RULE-BASED (Fast, deterministic)
-        # ───────────────────────────────────────────────────────────
-
         query_length = len(query)
         word_count = len(query.split())
 
@@ -168,13 +164,79 @@ class AdaptiveRAGTool(BaseTool):
         TF-IDF based search (keyword matching).
         Fast, good for simple queries.
 
-        Fallback: Rebuild TF-IDF if model not found
+        Fallback chain:
+        1. Use existing TF-IDF model
+        2. Build TF-IDF from ChromaDB if model missing
+        3. Fall back to semantic search if build fails
         """
 
-        # TODO: Implement TF-IDF retriever
-        # For now, fallback to semantic
-        logger.warning("⚠️ TF-IDF not implemented, falling back to semantic")
-        return await self._semantic_search(query, k)
+        # ═══════════════════════════════════════════════════════════
+        # FIX: Full TF-IDF implementation with fallback chain
+        # ═══════════════════════════════════════════════════════════
+
+        # Check if TF-IDF is ready
+        if not self.tfidf_retriever.is_ready():
+            logger.warning("⚠️ TF-IDF model not ready")
+
+            # Check if auto-rebuild is enabled
+            if self.settings.adaptive_rag.adaptive_tfidf_rebuild_on_missing:
+                logger.info("🔨 Attempting to build TF-IDF index from ChromaDB...")
+
+                try:
+                    # Get all documents from vector store
+                    collection = self.vector_store.get_collection(
+                        self.settings.memory.chroma_rag_collection
+                    )
+
+                    # Fetch all documents (limit to reasonable size)
+                    results = collection.get(limit=100000)
+
+                    if results and results.get("documents"):
+                        # Convert to Document objects
+                        documents = []
+                        for i, text in enumerate(results["documents"]):
+                            metadata = results["metadatas"][i] if results.get("metadatas") else {}
+                            doc = Document(page_content=text, metadata=metadata)
+                            documents.append(doc)
+
+                        logger.info(f"📚 Building TF-IDF from {len(documents)} documents...")
+
+                        # Build index
+                        success = await self.tfidf_retriever.build_index(documents)
+
+                        if not success:
+                            logger.error("❌ Failed to build TF-IDF index")
+                            logger.warning("⚠️ Falling back to semantic search")
+                            return await self._semantic_search(query, k)
+
+                        logger.info("✅ TF-IDF index built successfully")
+                    else:
+                        logger.warning("⚠️ No documents found in ChromaDB for TF-IDF")
+                        logger.warning("⚠️ Falling back to semantic search")
+                        return await self._semantic_search(query, k)
+
+                except Exception as e:
+                    logger.exception(f"❌ Failed to build TF-IDF: {e}")
+                    logger.warning("⚠️ Falling back to semantic search")
+                    return await self._semantic_search(query, k)
+            else:
+                logger.warning("⚠️ Auto-rebuild disabled, falling back to semantic search")
+                return await self._semantic_search(query, k)
+
+        # TF-IDF search
+        try:
+            results = await self.tfidf_retriever.search(query, k)
+
+            if results:
+                logger.info(f"✅ TF-IDF search: found {len(results)} documents")
+                return results
+            logger.warning("⚠️ TF-IDF returned no results, falling back to semantic")
+            return await self._semantic_search(query, k)
+
+        except Exception as e:
+            logger.exception(f"❌ TF-IDF search failed: {e}")
+            logger.warning("⚠️ Falling back to semantic search")
+            return await self._semantic_search(query, k)
 
     async def _semantic_search(self, query: str, k: int) -> list[Document]:
         """
@@ -253,10 +315,7 @@ class AdaptiveRAGTool(BaseTool):
             logger.error("❌ Both retrievers failed")
             return []
 
-        # ───────────────────────────────────────────────────────────
         # RECIPROCAL RANK FUSION (RRF)
-        # ───────────────────────────────────────────────────────────
-
         k_constant = self.settings.adaptive_rag.rrf_k_constant
         doc_scores = {}  # {doc_id: score}
         doc_objects = {}  # {doc_id: Document}
@@ -283,7 +342,8 @@ class AdaptiveRAGTool(BaseTool):
         fused_docs = [doc_objects[doc_id] for doc_id, score in sorted_doc_ids[:k]]
 
         logger.info(
-            f"✅ Hybrid RRF fusion: {len(tfidf_docs)} + {len(semantic_docs)} → {len(fused_docs)}"
+            f"✅ Hybrid RRF fusion: {len(tfidf_docs)} TF-IDF + {len(semantic_docs)} Semantic "
+            f"→ {len(fused_docs)} fused"
         )
 
         return fused_docs

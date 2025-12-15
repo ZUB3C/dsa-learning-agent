@@ -1,343 +1,353 @@
 """
-Web Search Tool using 4get meta-search engine.
+Web Search Tool: поиск через 4get metasearch engine.
 Code from Section 7.1 of architecture.
 """
 
 import logging
-import operator
 import time
 from typing import Any
-from urllib.parse import quote_plus
+from urllib.parse import urlencode
 
 import aiohttp
 
 from src.config import get_settings
-from src.exceptions import WebSearchUnavailableError
-from src.tools.base_tool import BaseTool, Document, ToolResult
+from src.tools.base_tool import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
 
 
 class WebSearchTool(BaseTool):
     """
-    Web search using 4get meta-search engine.
+    Web Search через 4get metasearch.
 
-    Features:
-    - Multiple scraper support (google, bing, duckduckgo)
-    - Fallback instances
-    - Domain filtering and prioritization
-    - Deduplication
-    - Optional content scraping
+    Uses: No LLM (pure API calls)
+    Fallback chain: Primary → Fallback instances → Cache
     """
 
     name = "web_search"
     description = """
-    Поиск в интернете через 4get meta-search engine.
+    Поиск в интернете через 4get metasearch engine.
 
     Params:
       query (str): поисковый запрос
       num_results (int): количество результатов (default: 5)
-      scrape_content (bool): загружать полный контент страниц (default: True)
+      scrape_content (bool): скачивать полный контент страниц (default: True)
 
     Returns:
-      ToolResult with search results (and optionally full content)
+      ToolResult with search results (title, url, snippet)
     """
 
     def __init__(self) -> None:
         super().__init__()
         self.settings = get_settings()
 
-        # Build instance list
-        self.instances = [
-            (
-                self.settings.web_search.web_search_base_url,
-                self.settings.web_search.web_search_scraper,
-            )
-        ]
+        # ═══════════════════════════════════════════════════════════
+        # FIX: Get instances from settings
+        # ═══════════════════════════════════════════════════════════
 
-        # Add fallbacks
-        for url, scraper in zip(
-            self.settings.web_search.web_search_fallback_urls,
-            self.settings.web_search.web_search_fallback_scrapers,
-            strict=False,
-        ):
-            self.instances.append((url, scraper))
+        # Primary instance from settings
+        self.primary_url = self.settings.web_search.web_search_base_url
 
-        logger.info(f"📡 Web Search initialized with {len(self.instances)} instances")
+        # Fallback instances from settings
+        self.fallback_urls = self.settings.web_search.web_search_fallback_urls
+
+        # Domain priorities
+        self.domain_priorities = {
+            ".edu": self.settings.web_search.web_search_priority_edu,
+            ".org": self.settings.web_search.web_search_priority_org,
+            ".gov": self.settings.web_search.web_search_priority_gov,
+            "wikipedia.org": self.settings.web_search.web_search_priority_wiki,
+            "habr.com": self.settings.web_search.web_search_priority_habr,
+            "stackoverflow.com": self.settings.web_search.web_search_priority_stackoverflow,
+            ".com": self.settings.web_search.web_search_priority_com,
+            ".ru": self.settings.web_search.web_search_priority_ru,
+        }
+
+        # Blacklist
+        self.blacklist = set(self.settings.web_search.web_search_blacklist)
+
+        logger.info("🔍 Web Search Tool initialized:")
+        logger.info(f"   - Primary: {self.primary_url}")
+        logger.info(f"   - Fallbacks: {self.fallback_urls}")
 
     async def execute(self, params: dict[str, Any]) -> ToolResult:
         """Execute web search."""
+
         query = params.get("query", "")
-        num_results = params.get("num_results", self.settings.web_search.web_search_results_limit)
+        num_results = params.get(
+            "num_results",
+            self.settings.web_search.web_search_results_limit
+        )
         scrape_content = params.get("scrape_content", True)
 
         if not query:
-            return ToolResult(success=False, documents=[], error="Query parameter is required")
+            return ToolResult(success=False, documents=[], error="Query is required")
 
         start_time = time.time()
 
-        # Optimize query
-        optimized_query = self._optimize_query(query)
+        # Trim query to max length
+        query = query[:200]
 
-        logger.info(f"🔍 Web Search: query='{optimized_query[:50]}...', results={num_results}")
+        # Add context if enabled
+        if self.settings.web_search.web_search_add_context:
+            context_suffix = self.settings.web_search.web_search_context_suffix
+            if context_suffix and context_suffix not in query:
+                query = f"{query} {context_suffix}"
+
+        logger.info(f"🔍 Web Search: query='{query[:80]}...', results={num_results}")
 
         # ═══════════════════════════════════════════════════════════
-        # STEP 1: SEARCH WITH FALLBACKS
+        # STEP 1: Try search with fallback chain
         # ═══════════════════════════════════════════════════════════
 
-        search_results = None
-        used_instance = None
-
-        for instance_url, scraper in self.instances:
-            try:
-                search_results = await self._search_instance(
-                    instance_url=instance_url,
-                    scraper=scraper,
-                    query=optimized_query,
-                    limit=num_results,
-                )
-                used_instance = (instance_url, scraper)
-                logger.info(f"✅ Search successful via {instance_url} ({scraper})")
-                break
-
-            except Exception as e:
-                logger.warning(f"⚠️ Search failed on {instance_url}: {e}")
-                continue
+        search_results = await self._search_with_fallback(query, num_results)
 
         if not search_results:
+            execution_time = (time.time() - start_time) * 1000
             return ToolResult(
                 success=False,
                 documents=[],
                 error="All search instances failed",
-                metadata={"attempted_instances": len(self.instances)},
+                execution_time_ms=execution_time,
             )
 
-        # ═══════════════════════════════════════════════════════════
-        # STEP 2: FILTER & PRIORITIZE
-        # ═══════════════════════════════════════════════════════════
-
-        filtered_results = self._filter_and_prioritize(search_results)
+        logger.info(f"✅ Found {len(search_results)} search results")
 
         # ═══════════════════════════════════════════════════════════
-        # STEP 3: DEDUPLICATE
+        # STEP 2: Filter blacklisted domains
         # ═══════════════════════════════════════════════════════════
 
-        deduped_results = self._deduplicate_results(filtered_results)
+        filtered_results = []
+        for result in search_results:
+            url = result.get("url", "")
+
+            # Check blacklist
+            if any(bl in url for bl in self.blacklist):
+                logger.debug(f"⛔ Blacklisted: {url}")
+                continue
+
+            # Calculate priority score
+            priority = 1.0
+            for domain, score in self.domain_priorities.items():
+                if domain in url:
+                    priority = score
+                    break
+
+            result["priority_score"] = priority
+            filtered_results.append(result)
+
+        # Sort by priority
+        filtered_results.sort(key=lambda r: r.get("priority_score", 1.0), reverse=True)
 
         logger.info(
-            f"📊 Search: {len(search_results)} → {len(filtered_results)} → {len(deduped_results)} results"
+            f"📊 Filtered: {len(search_results)} → {len(filtered_results)} "
+            f"(removed {len(search_results) - len(filtered_results)} blacklisted)"
         )
 
         # ═══════════════════════════════════════════════════════════
-        # STEP 4: SCRAPE CONTENT (Optional)
+        # STEP 3: Scrape content if requested
         # ═══════════════════════════════════════════════════════════
 
         documents = []
 
-        if scrape_content and deduped_results:
-            # Import scraper tool
+        if scrape_content:
+            # Import scraper
             from src.tools.web_scraper_tool import WebScraperTool
 
-            scraper_tool = WebScraperTool()
+            scraper = WebScraperTool()
 
-            urls = [r["url"] for r in deduped_results[:num_results]]
+            # Extract URLs
+            urls = [result["url"] for result in filtered_results]
 
-            try:
-                scrape_result = await scraper_tool.execute({"urls": urls})
+            # Scrape
+            scrape_result = await scraper.execute(
+                {"urls": urls, "extract_text": True, "extract_metadata": True}
+            )
 
-                if scrape_result.success:
-                    documents = scrape_result.documents
-                    logger.info(f"✅ Scraped {len(documents)} pages")
-                else:
-                    logger.warning("⚠️ Scraping failed, using snippets only")
-                    # Fallback: use snippets
-                    documents = self._create_documents_from_snippets(deduped_results[:num_results])
+            documents = scrape_result.documents
 
-            except Exception as e:
-                logger.exception(f"❌ Scraping error: {e}, using snippets")
-                documents = self._create_documents_from_snippets(deduped_results[:num_results])
+            logger.info(f"📄 Scraped {len(documents)}/{len(urls)} pages")
+
         else:
-            # No scraping, use snippets
-            documents = self._create_documents_from_snippets(deduped_results[:num_results])
+            # Return search snippets as documents
+            from src.tools.base_tool import Document
 
-        execution_time = (time.time() - start_time) * 1000  # ms
+            for result in filtered_results:
+                doc = Document(
+                    page_content=result.get("description", ""),
+                    metadata={
+                        "source": "web_search",
+                        "url": result.get("url"),
+                        "title": result.get("title"),
+                        "priority_score": result.get("priority_score", 1.0),
+                    },
+                )
+                documents.append(doc)
+
+        execution_time = (time.time() - start_time) * 1000
 
         return ToolResult(
             success=len(documents) > 0,
             documents=documents,
             metadata={
-                "instance_used": used_instance[0] if used_instance else None,
-                "scraper_used": used_instance[1] if used_instance else None,
-                "results_count": len(documents),
-                "content_scraped": scrape_content,
-                "execution_time_ms": execution_time,
+                "query": query,
+                "total_results": len(search_results),
+                "filtered_results": len(filtered_results),
+                "scraped_pages": len(documents),
             },
             execution_time_ms=execution_time,
         )
 
-    async def _search_instance(
-        self, instance_url: str, scraper: str, query: str, limit: int
+    async def _search_with_fallback(
+        self, query: str, limit: int = 5
     ) -> list[dict[str, Any]]:
         """
-        Execute search on a specific 4get instance.
+        Search with fallback chain.
+
+        Tries:
+        1. Primary instance
+        2. Fallback instances (in order)
+
+        Returns:
+            List of search results or empty list
+        """
+
+        # Try primary instance
+        try:
+            results = await self._search_4get(
+                base_url=self.primary_url, query=query, limit=limit
+            )
+
+            if results:
+                logger.info(f"✅ Search successful on primary: {self.primary_url}")
+                return results
+
+        except Exception as e:
+            logger.warning(f"⚠️ Primary search failed on {self.primary_url}: {e}")
+
+        # Try fallback instances
+        for fallback_url in self.fallback_urls:
+            try:
+                results = await self._search_4get(
+                    base_url=fallback_url, query=query, limit=limit
+                )
+
+                if results:
+                    logger.info(f"✅ Search successful on fallback: {fallback_url}")
+                    return results
+
+            except Exception as e:
+                logger.warning(f"⚠️ Fallback search failed on {fallback_url}: {e}")
+                continue
+
+        # All failed
+        logger.error("❌ All search instances failed")
+        return []
+
+    async def _search_4get(
+        self, base_url: str, query: str, limit: int = 5
+    ) -> list[dict[str, Any]]:
+        """
+        Search using 4get API.
 
         Args:
-            instance_url: Base URL of 4get instance
-            scraper: Scraper to use (google, bing, duckduckgo)
+            base_url: 4get instance URL
             query: Search query
-            limit: Number of results
+            limit: Max results
 
         Returns:
             List of search results
+
+        Raises:
+            Exception: If search fails
         """
 
-        # Build search URL
-        encoded_query = quote_plus(query)
-        search_url = f"{instance_url}/api/v1/search?s={scraper}&q={encoded_query}&limit={limit}"
+        # Build API URL - 4get uses /api/v1/web endpoint
+        params = {
+            "s": query,  # Search query parameter
+            "nsfw": "no",  # Filter NSFW content
+        }
 
-        timeout = aiohttp.ClientTimeout(total=self.settings.web_search.web_search_timeout_s)
+        # Construct URL
+        url = f"{base_url}/api/v1/web?{urlencode(params)}"
 
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(search_url) as response:
-                if response.status != 200:
-                    raise WebSearchUnavailableError(f"HTTP {response.status}")
+        timeout = aiohttp.ClientTimeout(
+            total=self.settings.web_search.web_search_timeout_s
+        )
 
-                data = await response.json()
+        # Retry logic
+        retry_count = self.settings.web_search.web_search_retry_count
 
-                # Parse 4get response format
-                # Format: {"web": [{"title": "...", "url": "...", "description": "..."}]}
-                return data.get("web", [])
+        for attempt in range(retry_count + 1):
+            try:
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    headers = {
+                        "User-Agent": (
+                            "Mozilla/5.0 (compatible; MaterialsAgent/2.0; "
+                            "+https://example.com/bot)"
+                        ),
+                        "Accept": "application/json",
+                    }
 
-    def _optimize_query(self, query: str) -> str:
-        """
-        Optimize search query.
+                    async with session.get(url, headers=headers) as response:
+                        if response.status == 404:
+                            logger.error(
+                                f"Search endpoint not found - HTTP {response.status}"
+                            )
+                            raise Exception(
+                                f"4get API endpoint unavailable (HTTP {response.status})"
+                            )
 
-        - Add context suffix if enabled
-        - Clean special characters
-        """
+                        if response.status != 200:
+                            text = await response.text()
+                            logger.error(
+                                f"Search request failed - HTTP {response.status}: "
+                                f"{text[:200]}"
+                            )
 
-        optimized = query.strip()
+                            if attempt < retry_count:
+                                logger.info(f"🔄 Retrying... (attempt {attempt + 1}/{retry_count})")
+                                continue
 
-        if self.settings.web_search.web_search_add_context:
-            # Add context for better results
-            context = self.settings.web_search.web_search_context_suffix
-            optimized = f"{optimized} {context}"
+                            raise Exception(f"HTTP {response.status}")
 
-        return optimized
+                        data = await response.json()
 
-    def _filter_and_prioritize(self, results: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """
-        Filter and prioritize search results by domain.
+                        # Parse 4get response
+                        results = []
 
-        - Remove blacklisted domains
-        - Boost priority domains
-        """
+                        # 4get returns results in "web" key
+                        if "web" in data and isinstance(data["web"], list):
+                            for item in data["web"][:limit]:
+                                result = {
+                                    "title": item.get("title", ""),
+                                    "url": item.get("url", ""),
+                                    "description": item.get("description", ""),
+                                }
+                                results.append(result)
 
-        filtered = []
+                        logger.info(f"📊 Parsed {len(results)} results from 4get")
 
-        for result in results:
-            url = result.get("url", "")
+                        return results
 
-            # Check blacklist
-            if any(
-                blacklisted in url for blacklisted in self.settings.web_search.web_search_blacklist
-            ):
-                logger.debug(f"⚫ Blacklisted: {url}")
-                continue
+            except aiohttp.ClientError as e:
+                logger.exception(f"Search request failed - {e}")
 
-            # Calculate priority score
-            priority = 1.0
+                if attempt < retry_count:
+                    logger.info(f"🔄 Retrying... (attempt {attempt + 1}/{retry_count})")
+                    continue
 
-            if ".edu" in url:
-                priority *= self.settings.web_search.web_search_priority_edu
-            elif ".org" in url:
-                priority *= self.settings.web_search.web_search_priority_org
-            elif ".gov" in url:
-                priority *= self.settings.web_search.web_search_priority_gov
-            elif "wikipedia.org" in url:
-                priority *= self.settings.web_search.web_search_priority_wiki
-            elif "habr.com" in url:
-                priority *= self.settings.web_search.web_search_priority_habr
-            elif "vc.ru" in url:
-                priority *= self.settings.web_search.web_search_priority_vc
-            elif "stackoverflow.com" in url:
-                priority *= self.settings.web_search.web_search_priority_stackoverflow
-            elif ".com" in url:
-                priority *= self.settings.web_search.web_search_priority_com
+                raise Exception(f"Web search service unavailable: {e}")
 
-            result["_priority"] = priority
-            filtered.append(result)
+            except Exception as e:
+                logger.exception(f"Search failed: {e}")
 
-        # Sort by priority
-        filtered.sort(key=operator.itemgetter("_priority"), reverse=True)
+                if attempt < retry_count:
+                    logger.info(f"🔄 Retrying... (attempt {attempt + 1}/{retry_count})")
+                    continue
 
-        return filtered
+                raise
 
-    def _deduplicate_results(self, results: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """
-        Deduplicate search results by URL and title similarity.
-        """
-
-        seen_urls = set()
-        seen_titles = set()
-        deduped = []
-
-        for result in results:
-            url = result.get("url", "")
-            title = result.get("title", "").lower()
-
-            # Skip exact URL duplicates
-            if url in seen_urls:
-                continue
-
-            # Skip very similar titles
-            is_duplicate = False
-            for seen_title in seen_titles:
-                # Simple similarity check
-                if (
-                    self._calculate_similarity(title, seen_title)
-                    > self.settings.web_search.web_search_deduplicate_threshold
-                ):
-                    is_duplicate = True
-                    break
-
-            if is_duplicate:
-                continue
-
-            seen_urls.add(url)
-            seen_titles.add(title)
-            deduped.append(result)
-
-        return deduped
-
-    def _calculate_similarity(self, s1: str, s2: str) -> float:
-        """Simple Jaccard similarity."""
-        words1 = set(s1.split())
-        words2 = set(s2.split())
-
-        if not words1 or not words2:
-            return 0.0
-
-        intersection = len(words1 & words2)
-        union = len(words1 | words2)
-
-        return intersection / union if union > 0 else 0.0
-
-    def _create_documents_from_snippets(self, results: list[dict[str, Any]]) -> list[Document]:
-        """Create documents from search result snippets."""
-
-        documents = []
-
-        for result in results:
-            doc = Document(
-                page_content=result.get("description", ""),
-                metadata={
-                    "title": result.get("title", ""),
-                    "url": result.get("url", ""),
-                    "source": "web_search_snippet",
-                },
-                source=result.get("url", ""),
-            )
-            documents.append(doc)
-
-        return documents
+        # Should not reach here
+        msg = "All retry attempts failed"
+        raise Exception(msg)

@@ -52,7 +52,7 @@ class QualityGateResult(BaseModel):
 class CleanDocument(BaseModel):
     """Document after Content Guard processing."""
 
-    content: str = Field(..., description="Cleaned content")
+    page_content: str = Field(..., description="Cleaned content")
     metadata: dict = Field(default_factory=dict, description="Document metadata")
     source: str = Field("", description="Source URL or identifier")
 

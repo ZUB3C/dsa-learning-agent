@@ -10,7 +10,7 @@ from langchain_core.runnables import Runnable
 from pydantic import ValidationError
 from selectolax.parser import HTMLParser
 
-from ..config import settings
+from ..config import get_settings
 from ..core.llm import get_llm
 from ..core.vector_store import vector_store_manager
 from ..models.fourget_models import FourGetResponse
@@ -94,14 +94,17 @@ QUESTION_SYSTEM_PROMPT = (
     "Ответь на вопрос студента, учитывая его уровень знаний."
 )
 
+settings = get_settings()
+
 
 class WebSearchProvider:
     """Provider for web search using 4get or other search engines."""
 
     def __init__(self) -> None:
-        self.base_url = settings.web_search_base_url
-        self.scraper = settings.web_search_scraper
-        self.provider = settings.web_search_provider
+
+        self.base_url = settings.web_search.web_search_base_url
+        self.scraper = settings.web_search.web_search_scraper
+        self.provider = settings.web_search.web_scraper  # pyright: ignore[reportAttributeAccessIssue]
         logger.info(
             f"WebSearchProvider initialized: provider={self.provider}, "
             f"base_url={self.base_url}, scraper={self.scraper}"
@@ -118,11 +121,11 @@ class WebSearchProvider:
         Returns:
             List of search results with title, url, and snippet
         """
-        if not settings.web_search_enabled:
+        if not settings.web_scraper.web_content_fetch_enabled:
             logger.warning("Web search is disabled in settings")
             return []
 
-        limit = limit or settings.web_search_results_limit
+        limit = limit or settings.web_search.web_search_results_limit
         logger.info(f"Searching web for query: '{query}' (limit={limit})")
 
         try:
@@ -201,7 +204,7 @@ class WebContentFetcher:
     """Fetches and extracts content from web pages using selectolax."""
 
     def __init__(self) -> None:
-        self.max_length = settings.web_content_max_length
+        self.max_length = settings.web_scraper.web_content_max_length
         self.timeout = 2  # 2 second timeout
         logger.info(
             f"WebContentFetcher initialized: max_length={self.max_length}, timeout={self.timeout}s"
@@ -217,7 +220,7 @@ class WebContentFetcher:
         Returns:
             Extracted text content or None if failed
         """
-        if not settings.web_content_fetch_enabled:
+        if not settings.web_scraper.web_content_fetch_enabled:
             logger.warning("Web content fetching is disabled")
             return None
 
@@ -387,7 +390,7 @@ def retrieve_materials(topic: str, user_level: str) -> list[Document]:
 
     try:
         documents = vector_store_manager.similarity_search_with_score(
-            query=query, k=settings.rag_top_k, filter_dict={"topic": topic} if topic else None
+            query=query, k=settings.adaptive_rag.rag_top_k, filter_dict={"topic": topic} if topic else None
         )
         logger.info(f"Retrieved {len(documents)} documents from RAG")
     except Exception as e:
@@ -425,7 +428,7 @@ async def retrieve_materials_reactive(
     logger.warning("❌ No materials found in RAG database")
 
     # Step 2: Fallback to web search
-    if not settings.web_search_enabled:
+    if not settings.web_scraper.web_content_fetch_enabled:
         logger.warning("Web search is disabled. Returning empty results.")
         return []
 
@@ -436,7 +439,7 @@ async def retrieve_materials_reactive(
     search_query = f"{topic} алгоритмы структуры данных обучение"
 
     # Get more search results than needed (for fallback options)
-    search_limit = (web_page_limit or settings.web_search_results_limit) * 3
+    search_limit = (web_page_limit or settings.web_search.web_search_results_limit) * 3
     search_results = await search_provider.search(search_query, limit=search_limit)
 
     if not search_results:
@@ -448,7 +451,7 @@ async def retrieve_materials_reactive(
     # Fetch content until we have enough pages (async, with retries)
     content_fetcher = WebContentFetcher()
     urls = [result["url"] for result in search_results]
-    target_pages = web_page_limit or settings.web_search_results_limit
+    target_pages = web_page_limit or settings.web_search.web_search_results_limit
 
     web_documents = await content_fetcher.fetch_multiple_until_limit(urls=urls, limit=target_pages)
 

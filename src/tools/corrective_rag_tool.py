@@ -5,6 +5,7 @@ Code from Section 6 of architecture.
 
 import json
 import logging
+import re
 import time
 from typing import Any
 
@@ -159,19 +160,27 @@ class CorrectiveRAGTool(BaseTool):
             prompt = RELEVANCE_SCORING_PROMPT.format(query=query, documents_batch=docs_text)
 
             try:
-                response = await self.llm.ainvoke(
-                    prompt, config={"timeout": self.settings.corrective_rag.corrective_timeout_s}
-                )
+                # FIX: Remove config parameter, timeout is set in LLM initialization
+                response = await self.llm.ainvoke(prompt)
 
-                # Parse JSON response
-                result = json.loads(response.content)
-                batch_scores = [r["relevance_score"] for r in result["results"]]
-                all_scores.extend(batch_scores)
+                # FIX: Parse response with robust JSON extraction
+                content = response.text.strip()
+
+                # Try to extract JSON from response
+                parsed_json = self._extract_json_from_response(content)
+
+                if parsed_json and "results" in parsed_json:
+                    batch_scores = [r["relevance_score"] for r in parsed_json["results"]]
+                    all_scores.extend(batch_scores)
+                else:
+                    msg = "Invalid JSON structure or no results found"
+                    raise ValueError(msg)
 
             except Exception as e:
                 logger.warning(
                     f"⚠️ Batch {i // batch_size + 1} failed: {e}, using individual scoring"
                 )
+                logger.debug(f"Response content: {response.content[:500] if 'response' in locals() else 'N/A'}")
 
                 # Fallback: Individual scoring
                 for doc in batch:
@@ -183,6 +192,51 @@ class CorrectiveRAGTool(BaseTool):
 
         return all_scores
 
+    def _extract_json_from_response(self, content: str) -> dict | None:
+        """
+        Extract JSON from LLM response with multiple fallback strategies.
+
+        Args:
+            content: Raw response content
+
+        Returns:
+            Parsed JSON dict or None
+        """
+
+        # Strategy 1: Try direct parse
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            pass
+
+        # Strategy 2: Extract from `````` code block
+        json_match = re.search(r"``````", content, re.DOTALL | re.IGNORECASE)
+        if json_match:
+            try:
+                return json.loads(json_match.group(1))
+            except json.JSONDecodeError:
+                pass
+
+        # Strategy 3: Extract from `````` code block
+        json_match = re.search(r"``````", content, re.DOTALL)
+        if json_match:
+            try:
+                return json.loads(json_match.group(1))
+            except json.JSONDecodeError:
+                pass
+
+        # Strategy 4: Find first { ... } object
+        json_match = re.search(r"\{.*\}", content, re.DOTALL)
+        if json_match:
+            try:
+                return json.loads(json_match.group(0))
+            except json.JSONDecodeError:
+                pass
+
+        # All strategies failed
+        logger.warning(f"⚠️ Could not extract JSON from response: {content[:200]}...")
+        return None
+
     async def _individual_relevance_score(self, query: str, doc: Document) -> float:
         """Individual relevance scoring (fallback)."""
 
@@ -191,12 +245,50 @@ class CorrectiveRAGTool(BaseTool):
         )
 
         try:
-            response = await self.llm.ainvoke(prompt, config={"timeout": 5.0})
-            result = json.loads(response.content)
-            return result["results"][0]["relevance_score"]
+            response = await self.llm.ainvoke(prompt)
+            content = response.content.strip()
+
+            # Try to extract JSON
+            parsed_json = self._extract_json_from_response(content)
+
+            if parsed_json and "results" in parsed_json and len(parsed_json["results"]) > 0:
+                return parsed_json["results"][0]["relevance_score"]
+            # Fallback to keyword scoring
+            logger.warning("⚠️ JSON parsing failed, using keyword fallback")
+            return self._keyword_fallback_score(query, doc)
+
         except Exception as e:
             logger.exception(f"❌ Individual scoring failed: {e}")
-            raise
+            return self._keyword_fallback_score(query, doc)
+
+    def _keyword_fallback_score(self, query: str, doc: Document) -> float:
+        """
+        Fallback keyword-based scoring using Jaccard similarity.
+
+        Args:
+            query: Search query
+            doc: Document to score
+
+        Returns:
+            Relevance score (0-1)
+        """
+
+        query_words = set(query.lower().split())
+        doc_words = set(doc.page_content.lower().split())
+
+        # Jaccard similarity
+        intersection = len(query_words & doc_words)
+        union = len(query_words | doc_words)
+
+        if union == 0:
+            return 0.5  # Neutral score
+
+        # Scale up similarity (multiply by 1.5, cap at 1.0)
+        score = min((intersection / union) * 1.5, 1.0)
+
+        logger.debug(f"📊 Keyword fallback score: {score:.2f}")
+
+        return score
 
     async def _evaluate_concept_coverage(self, query: str, documents: list[Document]) -> float:
         """
@@ -251,6 +343,7 @@ class CorrectiveRAGTool(BaseTool):
             "bfs",
             "dfs",
             "dijkstra",
+            "дейкстра",
         ]
 
         text_lower = text.lower()

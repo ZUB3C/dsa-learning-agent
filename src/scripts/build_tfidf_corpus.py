@@ -9,11 +9,12 @@ import asyncio
 import logging
 import pickle
 from pathlib import Path
+from typing import Any
 
 from langchain_core.documents import Document
+from scipy.sparse import csr_matrix
 from sklearn.feature_extraction.text import TfidfVectorizer
 
-# from sklearn.feature_extraction.text import TfidfVectorizer
 from src.config import get_settings
 from src.core.vector_store import vector_store_manager
 
@@ -48,7 +49,10 @@ class TFIDFCorpusBuilder:
         logger.info("📚 Fetching all documents from ChromaDB...")
 
         try:
-            collection = vector_store_manager.vectorstore.get_collection()
+            # Access collection through _client
+            collection = vector_store_manager.client.get_collection(
+                name=self.settings.vector_store.collection_name
+            )
 
             # Get all documents (in batches)
             all_results = collection.get()
@@ -80,7 +84,9 @@ class TFIDFCorpusBuilder:
             logger.exception(f"❌ Failed to fetch documents: {e}")
             return []
 
-    def build_tfidf_model(self, documents: list[Document]) -> tuple:
+    def build_tfidf_model(
+        self, documents: list[Document]
+    ) -> tuple[TfidfVectorizer, Any, list[str]]:
         """
         Build TF-IDF vectorizer and transform documents.
 
@@ -112,11 +118,17 @@ class TFIDFCorpusBuilder:
 
         logger.info("✅ Built TF-IDF model:")
         logger.info(f"   - Vocabulary size: {len(vectorizer.vocabulary_)}")
-        logger.info(f"   - Document vectors shape: {document_vectors.shape}")
+        if hasattr(document_vectors, "shape"):
+            logger.info(f"   - Document vectors shape: {document_vectors.shape}")
 
         return vectorizer, document_vectors, doc_ids
 
-    def save_model(self, vectorizer, document_vectors, doc_ids) -> None:
+    def save_model(
+        self,
+        vectorizer: TfidfVectorizer,
+        document_vectors: csr_matrix,
+        doc_ids: list[str],
+    ) -> None:
         """
         Save TF-IDF model to disk.
 

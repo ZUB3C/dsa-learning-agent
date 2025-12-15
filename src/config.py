@@ -31,7 +31,8 @@ class LLMSettings(BaseNestedSettings):
     gigachat_timeout_s: float = Field(60.0, description="GigaChat timeout in seconds")
 
     # GigaChat3 (Free, Fast)
-    gigachat3_model: str = Field("ai-sage/GigaChat3-10B-A1.8B", description="GigaChat3 model")
+    # gigachat3_model: str = Field("ai-sage/GigaChat3-10B-A1.8B", description="GigaChat3 model")
+    gigachat3_model: str = Field("openai/gpt-oss-120b", description="GigaChat3 model")
     gigachat3_temperature: float = Field(0.1, description="Temperature for GigaChat3")
     gigachat3_max_tokens: int = Field(2048, description="Max tokens for GigaChat3")
     gigachat3_timeout_s: float = Field(10.0, description="GigaChat3 timeout in seconds")
@@ -183,6 +184,8 @@ class AdaptiveRAGSettings(BaseNestedSettings):
 
     # Hybrid Search (RRF)
     rrf_k_constant: int = Field(60, description="RRF constant")
+    adaptive_tfidf_rebuild_on_missing: bool = Field(True, description="Rebuild TF-IDF if missing")
+    adaptive_tfidf_model_path: str = Field("./data/models/tfidf_model.pkl", description="TF-IDF model path")
 
 
 class CorrectiveRAGSettings(BaseNestedSettings):
@@ -225,9 +228,9 @@ class WebSearchSettings(BaseNestedSettings):
     web_search_priority_gov: float = Field(1.5, description=".gov priority")
     web_search_priority_wiki: float = Field(1.2, description="Wikipedia priority")
     web_search_priority_habr: float = Field(1.0, description="Habr priority")
-    web_search_priority_vc: float = Field(1.0, description="VC priority")
     web_search_priority_stackoverflow: float = Field(0.8, description="Stack Overflow priority")
     web_search_priority_com: float = Field(0.5, description=".com priority")
+    web_search_priority_ru: float = Field(2.5, description=".ru priority")
 
     # Blacklist
     web_search_blacklist: list[str] = Field(
@@ -460,6 +463,8 @@ class APISettings(BaseNestedSettings):
     # Rate Limiting
     api_rate_limit_per_minute: int = Field(10, description="Requests per minute")
     api_rate_limit_per_hour: int = Field(100, description="Requests per hour")
+
+    include_debug_info: bool = Field(default=True, description="Include debug info")
 
 
 class SecuritySettings(BaseNestedSettings):
