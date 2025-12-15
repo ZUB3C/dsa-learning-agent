@@ -1,0 +1,158 @@
+{
+    "generation_id": "gen_c69180d3361a",
+    "success": true,
+    "material": "# Применение DFS для реализации Reasoning в агентных системах\n\n## Введение\n\nПоиск в глубину (DFS, Depth-First Search) является одним из ключевых инструментов для анализа и обработки графовых структур. Его применение особенно актуально в контексте агентных систем, где необходимо принимать обоснованные решения на основе доступной информации. Агентные системы часто сталкиваются с необходимостью анализировать сложную сеть взаимодействий, находить оптимальные маршруты или выявлять скрытые зависимости. Именно здесь DFS становится незаменимым инструментом.\n\nDFS представляет собой стратегию обхода графа, позволяющую эффективно исследовать пространство состояний агента, находя кратчайшие пути к цели или определяя наличие связей между элементами. Благодаря своей рекурсивной природе, этот подход идеально подходит для ситуаций, когда важна последовательность принятия решений и возможность вернуться назад, если текущий путь оказался неверным.\n\n## Основная теория\n\n### Что такое DFS?\n\nDFS — это алгоритм обхода графа, основанный на принципе погружения вглубь структуры. Суть метода заключается в следующем:\n\n- Начинаем с произвольной вершины.\n- Переходим к первой связанной вершине, которую еще не посещали.\n- Повторяем процесс, пока не окажемся в ситуации, когда больше нет новых вершин для посещения.\n- Возвращаемся назад и ищем альтернативные пути.\n\nТаким образом, DFS последовательно проходит по ветвям графа, стараясь проникнуть как можно дальше перед возвратом к предыдущим вершинам.\n\n### Реализация DFS\n\n#### Рекурсивный подход\n\nНаиболее распространённый способ реализации DFS — использование рекурсии. Рассмотрим пример на Python:\n\n```python\ndef dfs(graph, vertex, visited):\n    \"\"\"\n    Обход графа в глубину.\n    \n    :param graph: словарь, представляющий граф {вершина: список_связанных_вершин}\n    :param vertex: текущая вершина\n    :param visited: множество посещённых вершин\n    \"\"\"\n    if vertex in visited:\n        return\n    visited.add(vertex)\n    print(f\"Посещаем вершину {vertex}\")\n    for neighbor in graph.get(vertex, []):\n        dfs(graph, neighbor, visited)\n```\n\nПример использования:\n\n```python\ngraph = {\n    'A': ['B', 'C'],\n    'B': ['D', 'E'],\n    'C': ['F'],\n    'D': [],\n    'E': ['F'],\n    'F': []\n}\n\nvisited = set()\ndfs(graph, 'A', visited)\n```\n\nРезультатом будет последовательный обход графа, начиная с вершины `'A'`.\n\n#### Итерация с явным стеком\n\nАльтернативный подход — использование явного стека для обхода графа. Это полезно, когда рекурсия может привести к переполнению стека вызовов.\n\n```python\ndef iterative_dfs(graph, start_vertex):\n    \"\"\"\n    Итеративный обход графа в глубину.\n    \n    :param graph: словарь, представляющий граф {вершина: список_связанных_вершин}\n    :param start_vertex: начальная вершина\n    \"\"\"\n    visited = set()\n    stack = [start_vertex]\n    \n    while stack:\n        vertex = stack.pop()\n        \n        if vertex not in visited:\n            visited.add(vertex)\n            print(f\"Посещаем вершину {vertex}\")\n            \n            # Добавляем необработанные соседние вершины в стек\n            neighbors = reversed(graph.get(vertex, []))\n            for neighbor in neighbors:\n                if neighbor not in visited:\n                    stack.append(neighbor)\n```\n\nЭтот подход идентичен рекурсивному варианту, но позволяет контролировать глубину обхода вручную.\n\n### Особенности DFS\n\n- **Эффективность**: временная сложность составляет $O(V + E)$, где $V$ — число вершин, $E$ — число рёбер.\n- **Использование памяти**: требует дополнительного пространства порядка $O(V)$ для хранения состояния.\n- **Применение**: полезен для обнаружения циклов, подсчета компонент связности, построения остовных деревьев и многих других задач.\n\n## Практическое применение DFS в агентных системах\n\nРассмотрим ситуацию, когда агент должен выбрать оптимальный путь в сложной среде. Представим, что агент находится в городе и хочет посетить максимальное количество достопримечательностей за минимальное время. Город представлен в виде графа, где вершины соответствуют достопримечательностям, а рёбра — дорогам между ними.\n\n### Пример задачи\n\nДопустим, город выглядит так:\n\n```\nA ---> B <--- C\n|      ^     |\nv      |     v\nD ----> E <-- F\n```\n\nЦель агента — определить наилучшую последовательность посещения точек, минимизируя общее расстояние.\n\nРешение с помощью DFS позволит нам систематически проверять все возможные маршруты, выбирая тот, который удовлетворяет нашим критериям.\n\n### Шаги решения\n\n1. Создаем представление графа.\n2. Запускаем DFS-обход, фиксируя длину маршрута.\n3. Определяем лучший маршрут среди возможных.\n\nРеализация:\n\n```python\ndef find_best_route(graph, start_vertex):\n    best_path = []\n    min_distance = float('inf')\n    \n    def dfs(current_vertex, path, distance):\n        nonlocal best_path, min_distance\n        \n        if len(path) >= len(graph):\n            if distance < min_distance:\n                min_distance = distance\n                best_path = list(path)\n            return\n        \n        for next_vertex in graph[current_vertex]:\n            new_distance = distance + calculate_distance(current_vertex, next_vertex)\n            dfs(next_vertex, path + [next_vertex], new_distance)\n    \n    dfs(start_vertex, [], 0)\n    return best_path\n```\n\nЗдесь `calculate_distance` — функция, вычисляющая стоимость перехода между двумя вершинами.\n\n## Сравнение с аналогами\n\n### По сравнению с BFS (поиском в ширину)\n\n- **Преимущества DFS**:\n  - Позволяет быстрее достигать глубоких уровней графа.\n  - Эффективнее для задач, где важны длинные цепочки событий.\n  \n- **Недостатки DFS**:\n  - Может зайти в бесконечный цикл в плохо спроектированных графах.\n  - Не гарантирует нахождения кратчайшего пути.\n\n### По сравнению с жадными методами\n\n- **Преимущества DFS**:\n  - Более гибкий подход, позволяющий возвращаться назад и пересматривать предыдущие шаги.\n  - Полезен для задач с большим числом ограничений.\n  \n- **Недостатки DFS**:\n  - Требует больше ресурсов для отслеживания истории посещений.\n  - Медленнее в задачах, где нужна быстрая оценка ближайшего окружения.\n\n## Практические советы\n\n1. **Следите за глубиной рекурсии**. Если ваша система сталкивается с ошибками переполнения стека, используйте итеративный подход.\n   \n2. **Оптимизация производительности**. Храните состояние посещённых вершин в множестве (`set`) для быстрого поиска.\n   \n3. **Анализ результатов**. После завершения обхода убедитесь, что все важные вершины были учтены.\n   \n4. **Отладка**. Проверяйте промежуточные результаты, используя печать текущих шагов.\n\n## Заключение\n\nDFS — универсальный инструмент для анализа графов и принятия решений в агентных системах. Его способность глубоко изучать пространство состояний делает его идеальным выбором для широкого спектра задач, от планирования маршрутов до выявления закономерностей в сетях взаимодействия агентов. Правильное понимание принципов работы DFS поможет вам создавать эффективные и надежные решения даже в условиях высокой неопределённости и сложности среды.",
+    "word_count": 836,
+    "sources": [
+        {
+            "source_type": "web_scraper",
+            "url": "https://openedu.ru/program/hse/ADS/",
+            "title": null,
+            "relevance_score": 1
+        },
+        {
+            "source_type": "web_scraper",
+            "url": "https://habr.com/ru/articles/875200/",
+            "title": null,
+            "relevance_score": 1
+        },
+        {
+            "source_type": "web_scraper",
+            "url": "https://habr.com/ru/articles/875200/",
+            "title": null,
+            "relevance_score": 1
+        },
+        {
+            "source_type": "web_scraper",
+            "url": "https://ru.wikipedia.org/wiki/%D0%9F%D0%BE%D0%B8%D1%81%D0%BA_%D0%B2_%D0%B3%D0%BB%D1%83%D0%B1%D0%B8%D0%BD%D1%83",
+            "title": null,
+            "relevance_score": 1
+        },
+        {
+            "source_type": "web_scraper",
+            "url": "https://profound.academy/ru/algorithms-data-structures/algoritm-depth-first-search-dfs-Hfp3FggTTjqlsuiDf6az",
+            "title": null,
+            "relevance_score": 1
+        },
+        {
+            "source_type": "web_scraper",
+            "url": "https://ru.hexlet.io/blog/posts/chto-takoe-dfs-i-dlya-chego-on-ispolzuetsya",
+            "title": null,
+            "relevance_score": 1
+        },
+        {
+            "source_type": "web_scraper",
+            "url": "https://agorinenko.github.io/data-structures-and-algorithms/tutorial/dfs.html",
+            "title": null,
+            "relevance_score": 1
+        },
+        {
+            "source_type": "web_scraper",
+            "url": "https://habr.com/ru/articles/875200/",
+            "title": null,
+            "relevance_score": 1
+        },
+        {
+            "source_type": "web_scraper",
+            "url": "https://ru.wikipedia.org/wiki/%D0%9F%D0%BE%D0%B8%D1%81%D0%BA_%D0%B2_%D0%B3%D0%BB%D1%83%D0%B1%D0%B8%D0%BD%D1%83",
+            "title": null,
+            "relevance_score": 1
+        },
+        {
+            "source_type": "web_scraper",
+            "url": "https://profound.academy/ru/algorithms-data-structures/algoritm-depth-first-search-dfs-Hfp3FggTTjqlsuiDf6az",
+            "title": null,
+            "relevance_score": 1
+        },
+        {
+            "source_type": "web_scraper",
+            "url": "https://ru.hexlet.io/blog/posts/chto-takoe-dfs-i-dlya-chego-on-ispolzuetsya",
+            "title": null,
+            "relevance_score": 1
+        },
+        {
+            "source_type": "web_scraper",
+            "url": "https://agorinenko.github.io/data-structures-and-algorithms/tutorial/dfs.html",
+            "title": null,
+            "relevance_score": 1
+        },
+        {
+            "source_type": "pdf",
+            "url": null,
+            "title": "",
+            "relevance_score": 1
+        },
+        {
+            "source_type": "pdf",
+            "url": null,
+            "title": "",
+            "relevance_score": 1
+        },
+        {
+            "source_type": "pdf",
+            "url": null,
+            "title": "",
+            "relevance_score": 1
+        },
+        {
+            "source_type": "pdf",
+            "url": null,
+            "title": "",
+            "relevance_score": 1
+        },
+        {
+            "source_type": "pdf",
+            "url": null,
+            "title": "",
+            "relevance_score": 1
+        },
+        {
+            "source_type": "pdf",
+            "url": null,
+            "title": "",
+            "relevance_score": 1
+        },
+        {
+            "source_type": "pdf",
+            "url": null,
+            "title": "",
+            "relevance_score": 1
+        }
+    ],
+    "documents_collected": 19,
+    "tot_metrics": {
+        "total_iterations": 18,
+        "explored_nodes": 18,
+        "best_path_length": 1,
+        "final_completeness": 0.78,
+        "tools_used": [
+            "corrective_check",
+            "web_search",
+            "adaptive_rag_search"
+        ],
+        "tool_call_counts": {
+            "corrective_check": 1,
+            "web_search": 1,
+            "adaptive_rag_search": 1
+        },
+        "gigachat2_max_calls": 9,
+        "gigachat3_calls": 36,
+        "estimated_cost_usd": 0.036,
+        "total_time_seconds": 197.43154430389404,
+        "memory_hints_used": false,
+        "procedural_patterns_found": 0
+    },
+    "best_path": [
+        {
+            "node_id": "node_6529a458",
+            "depth": 6,
+            "thought": "Проверим собранные ранее документы на предмет релевантности, чтобы убедиться, что они соответствуют запросу и помогут достичь цели.",
+            "tool_used": "corrective_check",
+            "completeness_score": 0.78,
+            "promise_score": 0.86,
+            "status": "promising"
+        }
+    ],
+    "warnings": [],
+    "fallbacks_used": []
+}
