@@ -323,3 +323,201 @@ class RootResponse(BaseModel):
     message: str
     version: str
     docs: str
+
+
+# ═══════════════════════════════════════════════════════════════
+# V2 SCHEMAS - Materials Agent with Tree-of-Thoughts
+# ═══════════════════════════════════════════════════════════════
+
+
+class GenerateMaterialV2Request(BaseModel):
+    """Request for v2 material generation with ToT."""
+
+    topic: str = Field(..., description="Topic to generate materials for")
+    user_level: Literal["beginner", "intermediate", "advanced"] = Field(
+        ..., description="User knowledge level"
+    )
+    user_id: str = Field(..., description="User ID for memory context")
+
+    # Optional parameters
+    language: str = Field(default="ru", description="Language (ru/en)")
+    max_iterations: int | None = Field(
+        default=None, description="Max ToT iterations (override config)"
+    )
+    completeness_threshold: float | None = Field(
+        default=None, ge=0.0, le=1.0, description="Completeness threshold (override config)"
+    )
+
+    # Feature flags (optional overrides)
+    enable_web_search: bool | None = Field(
+        default=None, description="Enable web search (override config)"
+    )
+    enable_adaptive_rag: bool | None = Field(
+        default=None, description="Enable adaptive RAG (override config)"
+    )
+
+
+class ToTNodeInfo(BaseModel):
+    """Information about a ToT node."""
+
+    node_id: str
+    depth: int
+    thought: str
+    tool_used: str | None
+    completeness_score: float
+    promise_score: float
+    status: str
+
+
+class ToTSearchMetrics(BaseModel):
+    """Metrics from ToT search."""
+
+    total_iterations: int
+    explored_nodes: int
+    best_path_length: int
+    final_completeness: float
+
+    # Tool usage
+    tools_used: List[str]
+    tool_call_counts: dict[str, int]
+
+    # LLM usage
+    gigachat2_max_calls: int
+    gigachat3_calls: int
+    estimated_cost_usd: float
+
+    # Performance
+    total_time_seconds: float
+
+    # Memory
+    memory_hints_used: bool
+    procedural_patterns_found: int
+
+
+class MaterialSource(BaseModel):
+    """Source of material."""
+
+    source_type: str  # "rag", "web", "memory"
+    url: str | None = None
+    title: str | None = None
+    relevance_score: float
+
+
+class GenerateMaterialV2Response(BaseModel):
+    """Response for v2 material generation."""
+
+    # Generation metadata
+    generation_id: str
+    success: bool
+
+    # Generated content
+    material: str
+    word_count: int
+
+    # Sources
+    sources: List[MaterialSource]
+    documents_collected: int
+
+    # ToT metrics
+    tot_metrics: ToTSearchMetrics
+
+    # Best path (optional, for debugging)
+    best_path: List[ToTNodeInfo] | None = None
+
+    # Warnings/errors
+    warnings: List[str] = []
+    fallbacks_used: List[str] = []
+
+
+class GetGenerationStatusRequest(BaseModel):
+    """Request to get generation status."""
+
+    generation_id: str
+
+
+class GetGenerationStatusResponse(BaseModel):
+    """Response with generation status."""
+
+    generation_id: str
+    status: Literal["pending", "running", "completed", "failed"]
+    progress: float  # 0-1
+    current_iteration: int | None = None
+    estimated_time_remaining: float | None = None
+
+    # If completed
+    result: GenerateMaterialV2Response | None = None
+
+
+class HealthCheckV2Response(BaseModel):
+    """Enhanced health check response."""
+
+    status: str  # "healthy", "degraded", "unhealthy"
+    timestamp: str
+    version: str
+
+    # Component status
+    components: dict[str, dict[str, Any]] = Field(description="Status of each component")
+
+    # Metrics
+    metrics: dict[str, float] = Field(description="System metrics")
+
+    # Features
+    features: dict[str, bool] = Field(description="Feature flags")
+
+
+class SystemMetricsResponse(BaseModel):
+    """System metrics response."""
+
+    # Request metrics (last hour)
+    total_requests: int
+    successful_requests: int
+    failed_requests: int
+    avg_response_time: float
+
+    # LLM usage (last hour)
+    gigachat2_max_calls: int
+    gigachat3_calls: int
+    total_cost_usd: float
+
+    # Tool usage (last hour)
+    tool_usage: dict[str, int]
+
+    # Content Guard (last hour)
+    documents_filtered: int
+    filter_rate: float
+
+    # Memory
+    procedural_patterns_stored: int
+    working_memory_sessions: int
+
+
+class GetLogsRequest(BaseModel):
+    """Request to get generation logs."""
+
+    generation_id: str | None = None
+    user_id: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    limit: int = Field(default=50, ge=1, le=1000)
+
+
+class GenerationLogEntry(BaseModel):
+    """Generation log entry."""
+
+    generation_id: str
+    user_id: str
+    topic: str
+    user_level: str
+    success: bool
+    final_completeness: float
+    total_time: float
+    created_at: str
+
+
+class GetLogsResponse(BaseModel):
+    """Response with generation logs."""
+
+    logs: List[GenerationLogEntry]
+    total_count: int
+    page: int
+    page_size: int

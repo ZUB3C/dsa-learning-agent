@@ -4,7 +4,9 @@ from langchain_chroma.vectorstores import Chroma
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 
-from ..config import settings
+from src.config import get_settings
+
+settings = get_settings()
 
 
 class VectorStoreManager:
@@ -14,15 +16,14 @@ class VectorStoreManager:
         self.embeddings = HuggingFaceEmbeddings(
             model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
         )
-
         self.client = chromadb.PersistentClient(
-            path=settings.chroma_persist_directory,
+            path=settings.memory.chroma_persist_directory,
             settings=ChromaSettings(anonymized_telemetry=False),
         )
 
         self.vectorstore = Chroma(
             client=self.client,
-            collection_name=settings.chroma_collection_name,
+            collection_name=settings.vector_store.collection_name,
             embedding_function=self.embeddings,
         )
 
@@ -59,25 +60,25 @@ class VectorStoreManager:
         return cleaned
 
     def similarity_search(
-        self, query: str, k: int = settings.rag_top_k, filter_dict: dict | None = None
+        self, query: str, k: int = settings.adaptive_rag.rag_top_k, filter_dict: dict | None = None
     ) -> list[Document]:
         """Поиск похожих документов."""
         return self.vectorstore.similarity_search(query=query, k=k, filter=filter_dict)
 
     def similarity_search_with_score(
-        self, query: str, k: int = settings.rag_top_k, filter_dict: dict | None = None
+        self, query: str, k: int = settings.adaptive_rag.rag_top_k, filter_dict: dict | None = None
     ) -> list[tuple[Document, float]]:
         """Поиск похожих документов."""
         return self.vectorstore.similarity_search_with_score(query=query, k=k, filter=filter_dict)
 
     def delete_collection(self) -> None:
         """Удалить коллекцию."""
-        self.client.delete_collection(settings.chroma_collection_name)
+        self.client.delete_collection(settings.vector_store.collection_name)
 
     def get_collection_info(self) -> dict:
         """Получить информацию о коллекции."""
         try:
-            collection = self.client.get_collection(settings.chroma_collection_name)
+            collection = self.client.get_collection(settings.vector_store.collection_name)
             return {
                 "name": collection.name,
                 "count": collection.count(),
@@ -89,7 +90,7 @@ class VectorStoreManager:
     def collection_exists(self) -> bool:
         """Проверить существование коллекции."""
         try:
-            self.client.get_collection(settings.chroma_collection_name)
+            self.client.get_collection(settings.vector_store.collection_name)
         except Exception:
             return False
         else:

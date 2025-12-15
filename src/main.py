@@ -1,12 +1,26 @@
+"""
+FastAPI application main entry point.
+Updated to include v2 routes.
+"""
+
+import logging
 import time
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
+from src.config import get_settings
+from src.core.database import init_db
+from src.routers import (
+    health,
+    materials,  # v1 (legacy)
+    materials_v2,  # v2 (new)
+)
+
 from .core.database import init_database
-from .models.schemas import RootResponse
 from .routers import assessment, health, llm_router, materials, support, tests, verification
 
 app = FastAPI(
@@ -39,7 +53,54 @@ async def startup_event() -> None:  # noqa: RUF029
     init_database()
 
 
-# Подключение роутеров
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan events."""
+    # Startup
+    logger.info("🚀 Starting Materials Agent v2...")
+    logger.info(f"Environment: {settings.project.environment}")
+    logger.info(f"Version: {settings.project.version}")
+
+    # Initialize database
+    await init_db()
+
+    yield
+
+    # Shutdown
+    logger.info("🛑 Shutting down...")
+
+
+# Create FastAPI app
+app = FastAPI(
+    title=settings.project.project_name,
+    version=settings.project.version,
+    description="Materials Agent with Tree-of-Thoughts",
+    lifespan=lifespan,
+)
+
+# CORS
+if settings.api.cors_enabled:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.api.cors_origins,
+        allow_credentials=True,
+        allow_methods=settings.api.cors_methods,
+        allow_headers=[settings.api.cors_headers],
+    )
+
+# Register routers
+app.include_router(health.router, prefix="/api/v2", tags=["health"])
+app.include_router(materials.router, prefix="/api/v1/materials", tags=["materials-v1"])
+app.include_router(materials_v2.router, prefix="/api/v2/materials", tags=["materials-v2"])
 app.include_router(health.router)
 app.include_router(verification.router)
 app.include_router(assessment.router)
@@ -50,12 +111,28 @@ app.include_router(support.router)
 
 
 @app.get("/")
-def root() -> RootResponse:
+async def root():
     """Root endpoint."""
-    return RootResponse(message="DSA Learning Platform API", version="1.0.0", docs="/docs")
+    return {
+        "name": settings.project.project_name,
+        "version": settings.project.version,
+        "status": "running",
+        "features": {
+            "tot_enabled": settings.features.feature_tot_enabled,
+            "content_guard_enabled": settings.features.feature_content_guard_enabled,
+            "adaptive_rag_enabled": settings.features.feature_adaptive_rag_enabled,
+            "web_search_enabled": settings.features.feature_web_search_enabled,
+        },
+    }
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=8001)
+    uvicorn.run(
+        "src.main:app",
+        host=settings.api.api_host,
+        port=settings.api.api_port,
+        workers=settings.api.api_workers,
+        reload=settings.project.debug,
+    )

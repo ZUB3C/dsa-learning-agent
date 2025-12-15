@@ -69,7 +69,7 @@ class PDFParser:
                 # Паттерн для разделов (уровень 2)
                 section_match = re.match(r"^(\d+)\.(\d+)[\.\s]+(.*?)\s+\.{2,}\s*(\d+)", line)
                 if section_match:
-                    title = f"{section_match.group(1)}.{section_match.group(2)} {section_match.group(3).strip()}"  # noqa: E501
+                    title = f"{section_match.group(1)}.{section_match.group(2)} {section_match.group(3).strip()}"
                     page = int(section_match.group(4))
                     toc.append((2, title, page))
                     continue

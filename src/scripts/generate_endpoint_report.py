@@ -176,7 +176,7 @@ async def test_assessment_endpoints() -> list[EndpointTestResult]:
             execution_time=execution_time,
         )
         logger.info(
-            f"✓ Успешно. Session ID: {session_id}. Вопросов: {len(result.test_questions)}. Время: {execution_time:.3f}s"  # noqa: E501
+            f"✓ Успешно. Session ID: {session_id}. Вопросов: {len(result.test_questions)}. Время: {execution_time:.3f}s"
         )
         results.append(test_result)
     except Exception as e:
@@ -437,7 +437,7 @@ async def test_materials_endpoints() -> list[EndpointTestResult]:
             execution_time=execution_time,
         )
         logger.info(
-            f"✓ Успешно. Материал сгенерирован. Topic ID: {generated_topic_id}. Время: {execution_time:.3f}s"  # noqa: E501
+            f"✓ Успешно. Материал сгенерирован. Topic ID: {generated_topic_id}. Время: {execution_time:.3f}s"
         )
         results.append(test_result)
     except Exception as e:
@@ -580,7 +580,7 @@ async def test_tests_endpoints() -> list[EndpointTestResult]:
             execution_time=execution_time,
         )
         logger.info(
-            f"✓ Успешно. Test ID: {test_id}. Вопросов: {len(result.questions)}. Время: {execution_time:.3f}s"  # noqa: E501
+            f"✓ Успешно. Test ID: {test_id}. Вопросов: {len(result.questions)}. Время: {execution_time:.3f}s"
         )
         results.append(test_result)
     except Exception as e:
@@ -626,7 +626,7 @@ async def test_tests_endpoints() -> list[EndpointTestResult]:
             execution_time=execution_time,
         )
         logger.info(
-            f"✓ Успешно. Task ID: {result.task.task_id}. Подсказок: {len(result.solution_hints)}. Время: {execution_time:.3f}s"  # noqa: E501
+            f"✓ Успешно. Task ID: {result.task.task_id}. Подсказок: {len(result.solution_hints)}. Время: {execution_time:.3f}s"
         )
         results.append(test_result)
     except Exception as e:
@@ -705,7 +705,7 @@ async def test_tests_endpoints() -> list[EndpointTestResult]:
                     execution_time=execution_time,
                 )
                 logger.info(
-                    f"✓ Успешно. Verification ID: {result.verification_id}. Время: {execution_time:.3f}s"  # noqa: E501
+                    f"✓ Успешно. Verification ID: {result.verification_id}. Время: {execution_time:.3f}s"
                 )
                 results.append(test_result)
             except Exception as e:
@@ -747,7 +747,7 @@ async def test_tests_endpoints() -> list[EndpointTestResult]:
             execution_time=execution_time,
         )
         logger.info(
-            f"✓ Успешно. Завершенных тестов: {len(result.completed_tests)}. Время: {execution_time:.3f}s"  # noqa: E501
+            f"✓ Успешно. Завершенных тестов: {len(result.completed_tests)}. Время: {execution_time:.3f}s"
         )
         results.append(test_result)
     except Exception as e:
@@ -784,7 +784,7 @@ async def test_verification_endpoints() -> list[EndpointTestResult]:
     try:
         request = TestVerificationRequest(
             test_id=str(uuid.uuid4()),
-            user_answer="В среднем случае временная сложность быстрой сортировки составляет O(n log n)",  # noqa: E501
+            user_answer="В среднем случае временная сложность быстрой сортировки составляет O(n log n)",
             language="ru",
             question="Какова временная сложность алгоритма быстрой сортировки в среднем случае?",
             expected_answer="O(n log n)",
@@ -802,7 +802,7 @@ async def test_verification_endpoints() -> list[EndpointTestResult]:
             execution_time=execution_time,
         )
         logger.info(
-            f"✓ Успешно. Оценка: {result.score}. Правильно: {result.is_correct}. Время: {execution_time:.3f}s"  # noqa: E501
+            f"✓ Успешно. Оценка: {result.score}. Правильно: {result.is_correct}. Время: {execution_time:.3f}s"
         )
         results.append(test_result)
     except Exception as e:
@@ -826,7 +826,7 @@ async def test_verification_endpoints() -> list[EndpointTestResult]:
     try:
         request2 = TestVerificationRequest(
             test_id=str(uuid.uuid4()),
-            user_answer="Бинарный поиск имеет сложность O(log n), потому что каждый раз делит массив пополам",  # noqa: E501
+            user_answer="Бинарный поиск имеет сложность O(log n), потому что каждый раз делит массив пополам",
             language="ru",
             question="Объясните временную сложность бинарного поиска",
             expected_answer="O(log n) - на каждом шаге поиск уменьшает область поиска вдвое",
@@ -883,7 +883,7 @@ async def test_verification_endpoints() -> list[EndpointTestResult]:
                 input_data={"user_id": test_user_id},
                 output_data={
                     "tests_count": 0,
-                    "warning": "История пуста. Возможно, check-test не связывает данные с user_id.",  # noqa: E501
+                    "warning": "История пуста. Возможно, check-test не связывает данные с user_id.",
                 },
                 status="success",
                 error_message="Warning: No history found for user.",

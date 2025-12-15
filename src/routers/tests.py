@@ -144,7 +144,7 @@ async def generate_task(request: GenerateTaskRequest) -> GenerateTaskResponse:
             return GenerateTaskResponse(
                 task=Task(
                     task_id=f"task_{hash(request.topic + request.difficulty)}",
-                    description=f"Решите задачу по теме '{request.topic}' уровня сложности '{request.difficulty}'",  # noqa: E501
+                    description=f"Решите задачу по теме '{request.topic}' уровня сложности '{request.difficulty}'",
                     topic=request.topic,
                     difficulty=request.difficulty,
                     task_type=request.task_type,

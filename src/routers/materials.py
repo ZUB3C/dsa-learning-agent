@@ -119,7 +119,7 @@ async def generate_material(request: GenerateMaterialRequest) -> GenerateMateria
         material_content = await materials_agent.ainvoke({
             "topic": request.topic,
             "user_level": user_level,
-            "retrieved_materials": f"Создайте {request.format} материал по теме '{request.topic}' длиной {request.length}",  # noqa: E501
+            "retrieved_materials": f"Создайте {request.format} материал по теме '{request.topic}' длиной {request.length}",
             "format": request.format,
         })
 
