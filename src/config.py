@@ -5,8 +5,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     # GigaChat settings (единый провайдер)
     gigachat_api_key: str = Field(alias="GIGACHAT_API_KEY", default="")
-    gigachat_model: str = Field(alias="GIGACHAT_MODEL", default="GigaChat")
-    gigachat3_model: str = Field(alias="GIGACHAT3_MODEL", default="GigaChat3-10B-A1.8B")
+    gigachat_model: str = Field(alias="GIGACHAT_MODEL", default="GigaChat/GigaChat-2-Max")
+    gigachat3_model: str = Field(alias="GIGACHAT3_MODEL", default="ai-sage/GigaChat3-10B-A1.8B")
     gigachat_base_url: str = Field(
         alias="GIGACHAT_BASE_URL", default="https://gigachat.devices.sberbank.ru/api/v1"
     )
