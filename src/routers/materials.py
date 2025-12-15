@@ -4,7 +4,11 @@ from fastapi import APIRouter, HTTPException
 from langchain_core.documents import Document
 
 from ..agents.llm_router_agent import LLMRouter
-from ..agents.materials_agent import retrieve_materials
+from ..agents.materials_agent import (
+    build_materials_agent,
+    format_retrieved_materials,
+    retrieve_materials_reactive,
+)
 from ..agents.registry import load_agent
 from ..core.database import CustomTopic, get_db_session, get_or_create_user
 from ..core.vector_store import vector_store_manager
@@ -29,15 +33,23 @@ router = APIRouter(prefix="/api/v1/materials", tags=["Materials"])
 
 @router.post("/get-materials")
 async def get_materials(request: GetMaterialsRequest) -> GetMaterialsResponse:
-    """Получить адаптированные учебные материалы."""
+    """
+    Получить адаптированные учебные материалы.
+
+    ReActive pattern: сначала ищет в RAG, при отсутствии материалов
+    автоматически делает поиск в интернете и загружает контент.
+    """
     try:
-        # Поиск в векторном хранилище
-        documents = vector_store_manager.similarity_search(query=request.topic, k=5)
+        # ReActive retrieval: RAG first, web search fallback
+        documents = await retrieve_materials_reactive(
+            topic=request.topic, user_level=request.user_level
+        )
 
-        retrieved_content = "\n\n".join([doc.page_content for doc in documents])
+        # Format retrieved materials
+        retrieved_content = format_retrieved_materials(documents)
 
-        # Используем агента для адаптации материала
-        materials_agent = load_agent("materials", language=request.language)
+        # Build and use agent for content adaptation
+        materials_agent = build_materials_agent()
 
         adapted_content = await materials_agent.ainvoke({
             "topic": request.topic,
@@ -45,9 +57,21 @@ async def get_materials(request: GetMaterialsRequest) -> GetMaterialsResponse:
             "retrieved_materials": retrieved_content,
         })
 
+        # Extract sources with proper handling of source types
+        sources = []
+        for doc in documents:
+            source = doc.metadata.get("source", "unknown")
+            source_type = doc.metadata.get("type", "rag")
+
+            # Format source string with type indicator
+            if source_type == "web":
+                sources.append(f"[Web] {source}")
+            else:
+                sources.append(source)
+
         return GetMaterialsResponse(
             content=adapted_content,
-            sources=[doc.metadata.get("source", "unknown") for doc in documents],
+            sources=sources,
             adapted_for_level=request.user_level,
         )
 
@@ -64,7 +88,7 @@ async def ask_question(request: AskQuestionRequest) -> AskQuestionResponse:
         answer = await materials_agent.ainvoke({
             "topic": request.context_topic,
             "user_level": request.user_level,
-            "retrieved_materials": retrieve_materials(
+            "retrieved_materials": retrieve_materials_reactive(
                 topic=request.context_topic, user_level=request.user_level
             ),
             "question": request.question,
@@ -201,18 +225,27 @@ async def get_topics() -> GetTopicsResponse:
 
 @router.post("/search")
 async def search_materials(request: SearchMaterialsRequest) -> SearchMaterialsResponse:
-    """Поиск материалов."""
+    """Поиск материалов с оценками релевантности."""
     try:
-        documents = vector_store_manager.similarity_search(
+        # Use similarity_search_with_score to get relevance scores
+        documents_with_scores = vector_store_manager.similarity_search(
             query=request.query, k=10, filter_dict=request.filters
         )
 
-        results: list[MaterialSearchResult] = [
-            MaterialSearchResult(content=doc.page_content[:200] + "...", metadata=doc.metadata)
-            for doc in documents
-        ]
+        # Extract documents and scores
+        results: list[MaterialSearchResult] = []
+        relevance_scores: list[float] = []
 
-        return SearchMaterialsResponse(results=results)
+        for doc, score in documents_with_scores:
+            results.append(
+                MaterialSearchResult(content=doc.page_content[:200] + "...", metadata=doc.metadata)
+            )
+            # Convert distance to similarity score (lower distance = higher similarity)
+            # Normalize to 0-1 range where 1 is most similar
+            similarity_score = 1.0 / (1.0 + score)
+            relevance_scores.append(round(similarity_score, 4))
+
+        return SearchMaterialsResponse(results=results, relevance_scores=relevance_scores)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search error: {e!s}")

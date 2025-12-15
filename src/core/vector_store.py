@@ -1,6 +1,6 @@
 import chromadb
 from chromadb.config import Settings as ChromaSettings
-from langchain_community.vectorstores import Chroma
+from langchain_chroma.vectorstores import Chroma
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 
@@ -63,6 +63,12 @@ class VectorStoreManager:
     ) -> list[Document]:
         """Поиск похожих документов."""
         return self.vectorstore.similarity_search(query=query, k=k, filter=filter_dict)
+
+    def similarity_search_with_score(
+        self, query: str, k: int = settings.rag_top_k, filter_dict: dict | None = None
+    ) -> list[tuple[Document, float]]:
+        """Поиск похожих документов."""
+        return self.vectorstore.similarity_search_with_score(query=query, k=k, filter=filter_dict)
 
     def delete_collection(self) -> None:
         """Удалить коллекцию."""

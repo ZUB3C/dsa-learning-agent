@@ -2,7 +2,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 
-from ..core.llm import get_llm_by_language
+from ..core.llm import get_llm
 
 TEST_GENERATION_SYSTEM_PROMPT = (
     "Ты - эксперт по созданию тестовых заданий по алгоритмам и структурам данных.\n"
@@ -32,9 +32,9 @@ TEST_GENERATION_SYSTEM_PROMPT = (
 )
 
 
-def build_test_generation_agent(language: str = "ru") -> Runnable:
+def build_test_generation_agent() -> Runnable:
     """Агент для генерации тестов."""
-    llm = get_llm_by_language(language)
+    llm = get_llm()
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", TEST_GENERATION_SYSTEM_PROMPT),

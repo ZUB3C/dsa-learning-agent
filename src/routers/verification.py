@@ -4,7 +4,7 @@ import uuid
 from fastapi import APIRouter, HTTPException
 
 from ..agents.registry import load_agent
-from ..core.database import TestResult, Verification, get_db_session, get_or_create_user
+from ..core.database import Verification, get_db_session
 from ..models.schemas import (
     GetVerificationHistoryResponse,
     TestVerificationRequest,

@@ -2,7 +2,7 @@ import re
 from pathlib import Path
 from types import TracebackType
 
-import pymupdf  # PyMuPDF
+import pymupdf
 
 
 class PDFParser:
