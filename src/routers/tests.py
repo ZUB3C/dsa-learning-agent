@@ -33,7 +33,7 @@ async def generate_test(request: GenerateTestRequest) -> GenerateTestResponse:
         router_instance.get_model_name(request.language)
 
         # Генерируем тест через агента
-        test_agent = load_agent("test-generation", language=request.language)
+        test_agent = load_agent("test-generation")
 
         test_content = await test_agent.ainvoke({
             "topic": request.topic,
@@ -68,7 +68,7 @@ async def generate_test(request: GenerateTestRequest) -> GenerateTestResponse:
                 test_id=test_id,
                 topic=request.topic,
                 difficulty=request.difficulty,
-                questions=json.dumps([q.dict() for q in questions]),
+                questions=json.dumps([q.model_dump() for q in questions]),
                 expected_duration=expected_duration,
             )
             session.add(test)
@@ -90,7 +90,7 @@ async def generate_task(request: GenerateTaskRequest) -> GenerateTaskResponse:
         selected_model = router_instance.get_model_name(request.language)
 
         # Генерируем задачу через агента генерации тестов
-        task_agent = load_agent("test-generation", language=request.language)
+        task_agent = load_agent("test-generation")
 
         task_result = await task_agent.ainvoke({
             "topic": request.topic,
