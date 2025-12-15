@@ -8,7 +8,6 @@ from ..config import settings
 
 
 def get_llm(
-    model: str | None = None,
     temperature: float | None = None,
     timeout: int | None = None,
     *,
@@ -16,13 +15,7 @@ def get_llm(
 ) -> BaseChatModel:
     """LLM GigaChat (единый провайдер с поддержкой двух моделей)."""
     # Выбираем модель: GigaChat3 если указано, иначе основную
-    selected_model = None
-    if use_gigachat3:
-        selected_model = settings.gigachat3_model
-    elif model:
-        selected_model = model
-    else:
-        selected_model = settings.gigachat_model
+    selected_model = settings.gigachat3_model if use_gigachat3 else settings.gigachat_model
 
     return ChatOpenAI(
         api_key=settings.gigachat_api_key,

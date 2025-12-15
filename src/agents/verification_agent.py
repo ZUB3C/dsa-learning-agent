@@ -56,7 +56,7 @@ SECONDARY_VERIFICATION_PROMPT = (
 
 def build_verification_agent() -> Runnable:
     """Агент для первичной проверки ответов."""
-    llm = get_llm()
+    llm = get_llm(use_gigachat3=True)
     prompt = ChatPromptTemplate.from_messages([
         ("system", PRIMARY_VERIFICATION_PROMPT),
         ("human", "Проверь ответ на тест."),
@@ -66,7 +66,7 @@ def build_verification_agent() -> Runnable:
 
 def build_secondary_verification_agent() -> Runnable:
     """Агент для вторичной проверки с учетом первичного вердикта."""
-    llm = get_llm()
+    llm = get_llm(use_gigachat3=False)
     prompt = ChatPromptTemplate.from_messages([
         ("system", SECONDARY_VERIFICATION_PROMPT),
         ("human", "Проверь оценку."),
