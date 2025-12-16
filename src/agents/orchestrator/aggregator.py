@@ -93,3 +93,10 @@ class Aggregator:
             agents_used=exec_result.agents_used,
             execution_time_ms=execution_time_ms,
         )
+def aggregate(
+    exec_result: ExecutionResult,
+    cls: ClassificationResult,
+    execution_time_ms: int,
+) -> ResolveResponse:
+    """Функция-обёртка вокруг Aggregator для удобного импорта."""
+    return Aggregator().aggregate(exec_result, cls, execution_time_ms)
