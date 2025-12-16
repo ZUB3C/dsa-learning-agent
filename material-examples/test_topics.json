@@ -1,0 +1,111 @@
+{
+  "test_suite": "materials_agent_v2_evaluation",
+  "total_topics": 15,
+  "topics": [
+    {
+      "topic_id": "beginner_01",
+      "topic": "Линейный поиск",
+      "user_level": "beginner",
+      "language": "ru",
+      "description": "Базовый алгоритм последовательного поиска элемента в массиве"
+    },
+    {
+      "topic_id": "beginner_02",
+      "topic": "Стек как структура данных",
+      "user_level": "beginner",
+      "language": "ru",
+      "description": "Структура данных LIFO (Last In First Out)"
+    },
+    {
+      "topic_id": "beginner_03",
+      "topic": "Очередь как структура данных",
+      "user_level": "beginner",
+      "language": "ru",
+      "description": "Структура данных FIFO (First In First Out)"
+    },
+    {
+      "topic_id": "beginner_04",
+      "topic": "Связный список как структура данных",
+      "user_level": "beginner",
+      "language": "ru",
+      "description": "Динамическая структура данных из узлов"
+    },
+    {
+      "topic_id": "beginner_05",
+      "topic": "Сложность алгоритмов Big O",
+      "user_level": "beginner",
+      "language": "ru",
+      "description": "Основы анализа временной и пространственной сложности"
+    },
+    {
+      "topic_id": "intermediate_01",
+      "topic": "Бинарный поиск",
+      "user_level": "intermediate",
+      "language": "ru",
+      "description": "Алгоритм поиска в отсортированном массиве за O(log n)"
+    },
+    {
+      "topic_id": "intermediate_02",
+      "topic": "Быстрая сортировка QuickSort",
+      "user_level": "intermediate",
+      "language": "ru",
+      "description": "Эффективный алгоритм сортировки методом разделяй и властвуй"
+    },
+    {
+      "topic_id": "intermediate_03",
+      "topic": "Хеш-таблицы как структура данных",
+      "user_level": "intermediate",
+      "language": "ru",
+      "description": "Структура данных для быстрого поиска, вставки и удаления"
+    },
+    {
+      "topic_id": "intermediate_04",
+      "topic": "Двоичное дерево поиска BST",
+      "user_level": "intermediate",
+      "language": "ru",
+      "description": "Иерархическая структура данных с упорядоченными узлами"
+    },
+    {
+      "topic_id": "intermediate_05",
+      "topic": "Рекурсия и обход дерева",
+      "user_level": "intermediate",
+      "language": "ru",
+      "description": "Рекурсивные алгоритмы обхода: preorder, inorder, postorder"
+    },
+    {
+      "topic_id": "advanced_01",
+      "topic": "Динамическое программирование",
+      "user_level": "advanced",
+      "language": "ru",
+      "description": "Метод оптимизации через решение подзадач и мемоизацию"
+    },
+    {
+      "topic_id": "advanced_02",
+      "topic": "Алгоритм Дейкстры",
+      "user_level": "advanced",
+      "language": "ru",
+      "description": "Поиск кратчайшего пути в графе с неотрицательными весами"
+    },
+    {
+      "topic_id": "advanced_03",
+      "topic": "AVL-деревья",
+      "user_level": "advanced",
+      "language": "ru",
+      "description": "Самобалансирующееся двоичное дерево поиска"
+    },
+    {
+      "topic_id": "advanced_04",
+      "topic": "Алгоритм Краскала для минимального остовного дерева",
+      "user_level": "advanced",
+      "language": "ru",
+      "description": "Жадный алгоритм поиска MST в взвешенном графе"
+    },
+    {
+      "topic_id": "advanced_05",
+      "topic": "Алгоритм Кнута-Морриса-Пратта KMP",
+      "user_level": "advanced",
+      "language": "ru",
+      "description": "Эффективный алгоритм поиска подстроки за O(n+m)"
+    }
+  ]
+}

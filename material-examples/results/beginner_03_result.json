@@ -1,0 +1,29 @@
+{
+  "topic_id": "beginner_03",
+  "topic": "Очередь как структура данных",
+  "user_level": "beginner",
+  "success": true,
+  "material_length": 4842,
+  "word_count": 533,
+  "tot_iterations": 18,
+  "explored_nodes": 18,
+  "final_completeness": 0.7,
+  "documents_collected": 11,
+  "completeness_score": 0.7,
+  "relevance_score": 0.8,
+  "quality_score": 0.8,
+  "generation_time_seconds": 162.0235733985901,
+  "gigachat2_calls": 9,
+  "gigachat3_calls": 36,
+  "estimated_cost_usd": 0.036,
+  "tools_used": [
+    "adaptive_rag_search",
+    "web_search",
+    "corrective_check"
+  ],
+  "generation_id": "gen_a6c50ac9f34e",
+  "warnings": [],
+  "fallbacks_used": [],
+  "error": null,
+  "generated_material": "# Очередь как структура данных  \n\n## Введение  \n\nОчередь — это простая, но важная структура данных, которая позволяет организовывать обработку элементов последовательно, следуя правилу \"первый пришёл — первый ушёл\" (FIFO, first-in-first-out). Она похожа на обычную жизненную очередь, где новый человек становится последним, а обслуживание начинается с самого первого посетителя. \n\nОчереди используются повсеместно: от управления потоками запросов в операционных системах до организации задач в приложениях реального времени. Их простота делает их незаменимым инструментом для многих областей программирования.\n\n## Основная теория  \n\n### Определение  \n\nОчередь — это упорядоченная коллекция элементов, где добавление новых элементов происходит в конец коллекции (`enqueue`), а удаление — из начала (`dequeue`).\n\n### Основные операции  \n\n- `enqueue(element)` — добавляет элемент в конец очереди.  \n- `dequeue()` — извлекает и удаляет первый элемент из очереди.  \n- `peek()` — показывает первый элемент, не удаляя его.  \n- `is_empty()` — проверяет, пуста ли очередь.  \n- `size()` — возвращает количество элементов в очереди.  \n\n### Реализации  \n\n#### 1. Очередь на основе связанного списка  \nЭто наиболее распространённый способ реализации очереди. Каждый элемент представлен узлом, содержащим данные и ссылку на следующий узел. Первый узел называется головным (`front`), последний — хвостовым (`rear`).  \n\n```python\nclass Node:\n    def __init__(self, data):\n        self.data = data\n        self.next = None\n\nclass QueueLinkedList:\n    def __init__(self):\n        self.front = None\n        self.rear = None\n    \n    def enqueue(self, item):\n        \"\"\"Добавляет элемент в конец очереди.\"\"\"\n        node = Node(item)\n        if self.rear is None:\n            self.front = self.rear = node\n        else:\n            self.rear.next = node\n            self.rear = node\n            \n    def dequeue(self):\n        \"\"\"Удаляет элемент из начала очереди.\"\"\"\n        if self.is_empty():\n            raise Exception(\"Очередь пуста\")\n        temp = self.front\n        self.front = temp.next\n        \n        if self.front is None:\n            self.rear = None\n        return temp.data\n    \n    def peek(self):\n        \"\"\"Возвращает первый элемент очереди.\"\"\"\n        if self.is_empty():\n            raise Exception(\"Очередь пуста\")\n        return self.front.data\n    \n    def is_empty(self):\n        \"\"\"Проверяет, пуста ли очередь.\"\"\"\n        return self.front is None\n```\n\n#### 2. Очередь на основе двух стеков  \nМожно реализовать очередь, используя два стека. Один стек служит для добавления элементов, другой — для их извлечения.  \n\n```python\nclass QueueWithStacks:\n    def __init__(self):\n        self.input_stack = []\n        self.output_stack = []\n    \n    def enqueue(self, item):\n        \"\"\"Добавляет элемент в очередь.\"\"\"\n        self.input_stack.append(item)\n    \n    def dequeue(self):\n        \"\"\"Удаляет элемент из очереди.\"\"\"\n        if not self.output_stack:\n            while self.input_stack:\n                self.output_stack.append(self.input_stack.pop())\n        if not self.output_stack:\n            raise Exception(\"Очередь пуста\")\n        return self.output_stack.pop()\n    \n    def peek(self):\n        \"\"\"Возвращает первый элемент очереди.\"\"\"\n        if not self.output_stack:\n            while self.input_stack:\n                self.output_stack.append(self.input_stack.pop())\n        if not self.output_stack:\n            raise Exception(\"Очередь пуста\")\n        return self.output_stack[-1]\n    \n    def is_empty(self):\n        \"\"\"Проверяет, пуста ли очередь.\"\"\"\n        return not (self.input_stack or self.output_stack)\n```\n\n### Временная и пространственная сложность  \n\n| Операция | Время |\n|----------|-------|\n| Enqueue  | O(1)  |\n| Dequeue  | O(n)   |\n| Peek     | O(1)  |\n| Is Empty | O(1)  |\n\nПространственная сложность обеих реализаций — O(n), где n — количество элементов в очереди.\n\n## Практическое применение  \n\nОчереди часто встречаются в следующих ситуациях:  \n\n- Обработка событий в операционной системе.  \n- Организация потоков задач в многозадачных программах.  \n- Управление буферизацией данных в сетевых протоколах.  \n- Планировщики задач и обработка сообщений.  \n\n## Советы и лучшие практики  \n\n1. Всегда проверяйте очередь на пустоту перед извлечением элементов.  \n2. Выбирайте подходящую реализацию исходя из требований производительности.  \n3. Не забывайте учитывать ограничения размера очереди, особенно при работе с большими объёмами данных.  \n4. Используйте встроенные классы очередей, предоставляемые языком программирования, если это возможно.  \n\n## Заключение  \n\nОчередь — это простая, но крайне полезная структура данных, позволяющая организовать последовательную обработку элементов. Её понимание и правильное использование существенно упрощают решение множества повседневных задач в разработке ПО."
+}
