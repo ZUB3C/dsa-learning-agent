@@ -376,6 +376,8 @@ class ToTSearchMetrics(BaseModel):
     explored_nodes: int
     best_path_length: int
     final_completeness: float
+    final_relevance: float
+    final_quality: float
 
     # Tool usage
     tools_used: list[str]

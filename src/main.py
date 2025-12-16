@@ -14,7 +14,7 @@ from starlette.responses import Response
 
 from src.config import get_settings
 from src.core.database import init_db
-from src.core.logging_handler import setup_database_logging, get_db_handler
+from src.core.logging_handler import get_db_handler, setup_database_logging
 from src.routers import (
     health,
     materials,  # v1 (legacy)
@@ -45,6 +45,8 @@ async def latency_header(request: Request, call_next: RequestResponseEndpoint) -
     resp = await call_next(request)
     resp.headers["X-Process-Time"] = f"{time.time() - start:.3f}"
     return resp
+
+
 # Middleware для установки контекста логирования
 @app.middleware("http")
 async def logging_context_middleware(request: Request, call_next):
@@ -65,12 +67,12 @@ async def logging_context_middleware(request: Request, call_next):
         )
 
     try:
-        response = await call_next(request)
-        return response
+        return await call_next(request)
     finally:
         # Clear context after request
         if db_handler:
             db_handler.clear_context()
+
 
 @app.on_event("startup")
 async def startup_event() -> None:

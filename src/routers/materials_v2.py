@@ -226,7 +226,10 @@ async def generate_material_v2(
         )
         for doc in tot_result.collected_documents
     ]
-
+    if tot_result.best_path:
+        best_solution = tot_result.best_path[-1]
+        final_relevance = best_solution.relevance_score
+        final_quality = best_solution.quality_score
     # Build metrics
     metrics = ToTSearchMetrics(
         total_iterations=tot_result.iterations,
@@ -241,6 +244,8 @@ async def generate_material_v2(
         total_time_seconds=tot_result.total_time,
         memory_hints_used=len(memory_context.patterns) > 0,
         procedural_patterns_found=len(memory_context.patterns),
+        final_relevance=final_relevance,  # pyright: ignore[reportPossiblyUnboundVariable]
+        final_quality=final_quality,  # pyright: ignore[reportPossiblyUnboundVariable]
     )
 
     # Best path (optional)

@@ -23,13 +23,13 @@ import aiohttp
 from pydantic import BaseModel
 
 from src.config import get_settings
-from src.metrics.deepeval_metrics import DeepEvalMetrics
 
 settings = get_settings()
+
 logging.basicConfig(
-    level=settings.logging.log_level,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=settings.logging.log_level, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
+
 logger = logging.getLogger(__name__)
 
 
@@ -40,6 +40,7 @@ logger = logging.getLogger(__name__)
 
 class TestTopic(BaseModel):
     """Single test topic."""
+
     topic_id: str
     topic: str
     user_level: str
@@ -49,6 +50,7 @@ class TestTopic(BaseModel):
 
 class APIResponse(BaseModel):
     """API response model."""
+
     generation_id: str
     success: bool
     material: str
@@ -61,6 +63,7 @@ class APIResponse(BaseModel):
 
 class TestResult(BaseModel):
     """Result for a single test."""
+
     topic_id: str
     topic: str
     user_level: str
@@ -76,7 +79,7 @@ class TestResult(BaseModel):
     final_completeness: float
     documents_collected: int
 
-    # DeepEval metrics
+    # DeepEval metrics (from ToT evaluation)
     completeness_score: float
     relevance_score: float
     quality_score: float
@@ -96,9 +99,13 @@ class TestResult(BaseModel):
     fallbacks_used: list[str] = []
     error: str | None = None
 
+    # Generated material (added at the end of JSON)
+    generated_material: str = ""
+
 
 class AggregatedMetrics(BaseModel):
     """Aggregated metrics across all tests."""
+
     total_tests: int
     successful_tests: int
     failed_tests: int
@@ -134,6 +141,7 @@ class AggregatedMetrics(BaseModel):
 
 class MetricsReport(BaseModel):
     """Complete metrics report."""
+
     test_suite: str
     base_url: str
     overall_metrics: AggregatedMetrics
@@ -148,16 +156,12 @@ class MetricsReport(BaseModel):
 class MaterialsAgentClient:
     """Client for Materials Agent v2 API."""
 
-    def __init__(self, base_url: str = "http://localhost:8000"):
+    def __init__(self, base_url: str = "http://localhost:8000") -> None:
         self.base_url = base_url.rstrip("/")
         self.endpoint = f"{self.base_url}/api/v2/materials/generate"
 
     async def generate_material(
-        self, 
-        topic: str, 
-        user_level: str,
-        language: str = "ru",
-        user_id: str = "test_user"
+        self, topic: str, user_level: str, language: str = "ru", user_id: str = "test_user"
     ) -> dict[str, Any]:
         """
         Call the Materials Agent v2 API.
@@ -175,7 +179,7 @@ class MaterialsAgentClient:
             "topic": topic,
             "user_level": user_level,
             "user_id": user_id,
-            "language": language
+            "language": language,
         }
 
         logger.info(f"📤 Calling API: {topic} ({user_level})")
@@ -190,94 +194,28 @@ class MaterialsAgentClient:
                     logger.info(f"✅ API success: {topic}")
                     return data
             except aiohttp.ClientResponseError as e:
-                logger.error(f"❌ API error {e.status}: {topic}")
+                logger.exception(f"❌ API error {e.status}: {topic}")
                 error_text = await e.response.text() if e.response else "Unknown error"  # pyright: ignore[reportAttributeAccessIssue]
                 raise Exception(f"API error {e.status}: {error_text}")
-            except asyncio.TimeoutError:
-                logger.error(f"⏱️ API timeout: {topic}")
-                raise Exception("API request timed out after 5 minutes")
+            except TimeoutError:
+                logger.exception(f"⏱️ API timeout: {topic}")
+                msg = "API request timed out after 5 minutes"
+                raise Exception(msg)
             except Exception as e:
-                logger.error(f"❌ Request failed: {topic} - {e}")
+                logger.exception(f"❌ Request failed: {topic} - {e}")
                 raise
 
 
 # ═══════════════════════════════════════════════════════════════════
-# METRICS CALCULATION
+# METRICS EXTRACTION FROM TOT RESULT
 # ═══════════════════════════════════════════════════════════════════
 
 
-def calculate_deepeval_metrics(
-    topic: str,
-    material: str,
-    context: str
-) -> dict[str, float]:
-    """
-    Calculate DeepEval metrics for generated material.
-
-    Args:
-        topic: Original topic/query
-        material: Generated material
-        context: Source context (documents)
-
-    Returns:
-        Dict with completeness, relevance, quality scores
-    """
-    # Calculate individual metrics
-    relevance = DeepEvalMetrics.calculate_answer_relevance(topic, material)
-    quality = DeepEvalMetrics.calculate_coherence(material)
-
-    # Calculate completeness (faithfulness to context)
-    if context:
-        completeness = DeepEvalMetrics.calculate_faithfulness(context, material)
-    else:
-        # If no context, estimate based on material structure
-        completeness = estimate_completeness(material)
-
-    return {
-        "completeness": round(completeness, 3),
-        "relevance": round(relevance, 3),
-        "quality": round(quality, 3)
-    }
-
-
-def estimate_completeness(material: str) -> float:
-    """
-    Estimate completeness based on material structure.
-
-    Args:
-        material: Generated material
-
-    Returns:
-        Completeness score (0-1)
-    """
-    # Check for key sections
-    has_intro = any(keyword in material.lower() for keyword in ["введение", "overview", "что такое"])
-    has_examples = any(keyword in material.lower() for keyword in ["пример", "example", "рассмотрим"])
-    has_code = "```" in material or "python" in material.lower()
-    has_complexity = any(keyword in material.lower() for keyword in ["сложность", "o(", "complexity"])
-    has_conclusion = any(keyword in material.lower() for keyword in ["заключение", "итог", "conclusion", "summary"])
-
-    # Calculate score
-    score = 0.0
-    if has_intro:
-        score += 0.2
-    if has_examples:
-        score += 0.25
-    if has_code:
-        score += 0.25
-    if has_complexity:
-        score += 0.15
-    if has_conclusion:
-        score += 0.15
-
-    # Minimum score based on length
-    word_count = len(material.split())
-    if word_count >= 1000:
-        score = max(score, 0.7)
-    elif word_count >= 500:
-        score = max(score, 0.5)
-
-    return min(score, 1.0)
+def extract_tot_metrics(tot_metrics: dict[str, Any]) -> tuple[float, float, float]:
+    completeness = tot_metrics.get("final_completeness", 0.0)
+    relevance = tot_metrics.get("final_relevance", 0.0)
+    quality = tot_metrics.get("final_quality", 0.0)
+    return completeness, relevance, quality
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -285,10 +223,7 @@ def estimate_completeness(material: str) -> float:
 # ═══════════════════════════════════════════════════════════════════
 
 
-async def run_single_test(
-    client: MaterialsAgentClient,
-    test_topic: TestTopic
-) -> TestResult:
+async def run_single_test(client: MaterialsAgentClient, test_topic: TestTopic) -> TestResult:
     """
     Run a single test case.
 
@@ -308,30 +243,17 @@ async def run_single_test(
     try:
         # Call API
         response = await client.generate_material(
-            topic=test_topic.topic,
-            user_level=test_topic.user_level,
-            language=test_topic.language
+            topic=test_topic.topic, user_level=test_topic.user_level, language=test_topic.language
         )
 
         generation_time = time.time() - start_time
 
-        # Extract metrics from response
+        # Extract data from response
         material = response["material"]
         tot_metrics = response["tot_metrics"]
 
-        # Build context from sources (if available)
-        context = ""
-        if "sources" in response:
-            for source in response["sources"][:5]:  # Top 5 sources
-                if "content" in source:
-                    context += source["content"] + "\n\n"
-
-        # Calculate DeepEval metrics
-        deepeval_metrics = calculate_deepeval_metrics(
-            topic=test_topic.topic,
-            material=material,
-            context=context
-        )
+        # Extract REAL metrics from ToT result (from evaluation_chain)
+        completeness, relevance, quality = extract_tot_metrics(tot_metrics)
 
         # Build result
         result = TestResult(
@@ -345,9 +267,10 @@ async def run_single_test(
             explored_nodes=tot_metrics["explored_nodes"],
             final_completeness=tot_metrics["final_completeness"],
             documents_collected=response["documents_collected"],
-            completeness_score=deepeval_metrics["completeness"],
-            relevance_score=deepeval_metrics["relevance"],
-            quality_score=deepeval_metrics["quality"],
+            # Use REAL metrics from ToT evaluation
+            completeness_score=completeness,
+            relevance_score=relevance,
+            quality_score=quality,
             generation_time_seconds=generation_time,
             gigachat2_calls=tot_metrics["gigachat2_max_calls"],
             gigachat3_calls=tot_metrics["gigachat3_calls"],
@@ -355,7 +278,8 @@ async def run_single_test(
             tools_used=tot_metrics["tools_used"],
             generation_id=response["generation_id"],
             warnings=response.get("warnings", []),
-            fallbacks_used=response.get("fallbacks_used", [])
+            fallbacks_used=response.get("fallbacks_used", []),
+            generated_material=material,  # Save the generated material
         )
 
         logger.info(f"✅ Test passed: {test_topic.topic}")
@@ -368,7 +292,7 @@ async def run_single_test(
 
     except Exception as e:
         generation_time = time.time() - start_time
-        logger.error(f"❌ Test failed: {test_topic.topic} - {e}")
+        logger.exception(f"❌ Test failed: {test_topic.topic} - {e}")
 
         return TestResult(
             topic_id=test_topic.topic_id,
@@ -390,14 +314,13 @@ async def run_single_test(
             estimated_cost_usd=0.0,
             tools_used=[],
             generation_id="",
-            error=str(e)
+            error=str(e),
+            generated_material="",  # Empty string for failed tests
         )
 
 
 async def run_all_tests(
-    test_topics: list[TestTopic],
-    base_url: str,
-    delay_between_tests: float = 2.0
+    test_topics: list[TestTopic], base_url: str, delay_between_tests: float = 2.0
 ) -> list[TestResult]:
     """
     Run all test cases sequentially.
@@ -473,7 +396,7 @@ def aggregate_metrics(results: list[TestResult]) -> AggregatedMetrics:
             avg_cost_per_test=0.0,
             total_gigachat2_calls=0,
             total_gigachat3_calls=0,
-            breakdown_by_level={}
+            breakdown_by_level={},
         )
 
     # Overall metrics
@@ -488,11 +411,14 @@ def aggregate_metrics(results: list[TestResult]) -> AggregatedMetrics:
         if level_results:
             breakdown[level] = {
                 "count": len(level_results),
-                "avg_completeness": sum(r.completeness_score for r in level_results) / len(level_results),
-                "avg_relevance": sum(r.relevance_score for r in level_results) / len(level_results),
+                "avg_completeness": sum(r.completeness_score for r in level_results)
+                / len(level_results),
+                "avg_relevance": sum(r.relevance_score for r in level_results)
+                / len(level_results),
                 "avg_quality": sum(r.quality_score for r in level_results) / len(level_results),
-                "avg_generation_time": sum(r.generation_time_seconds for r in level_results) / len(level_results),
-                "avg_cost": sum(r.estimated_cost_usd for r in level_results) / len(level_results)
+                "avg_generation_time": sum(r.generation_time_seconds for r in level_results)
+                / len(level_results),
+                "avg_cost": sum(r.estimated_cost_usd for r in level_results) / len(level_results),
             }
 
     return AggregatedMetrics(
@@ -500,7 +426,6 @@ def aggregate_metrics(results: list[TestResult]) -> AggregatedMetrics:
         successful_tests=successful_tests,
         failed_tests=failed_tests,
         success_rate=round(successful_tests / total_tests * 100, 2),
-
         avg_completeness=round(sum(completeness_scores) / len(completeness_scores), 3),
         avg_relevance=round(sum(relevance_scores) / len(relevance_scores), 3),
         avg_quality=round(sum(quality_scores) / len(quality_scores), 3),
@@ -510,19 +435,26 @@ def aggregate_metrics(results: list[TestResult]) -> AggregatedMetrics:
         max_relevance=round(max(relevance_scores), 3),
         min_quality=round(min(quality_scores), 3),
         max_quality=round(max(quality_scores), 3),
-
-        avg_generation_time=round(sum(r.generation_time_seconds for r in successful_results) / len(successful_results), 2),
+        avg_generation_time=round(
+            sum(r.generation_time_seconds for r in successful_results) / len(successful_results), 2
+        ),
         total_generation_time=round(sum(r.generation_time_seconds for r in results), 2),
-        avg_tot_iterations=round(sum(r.tot_iterations for r in successful_results) / len(successful_results), 2),
-        avg_explored_nodes=round(sum(r.explored_nodes for r in successful_results) / len(successful_results), 2),
-        avg_documents_collected=round(sum(r.documents_collected for r in successful_results) / len(successful_results), 2),
-
+        avg_tot_iterations=round(
+            sum(r.tot_iterations for r in successful_results) / len(successful_results), 2
+        ),
+        avg_explored_nodes=round(
+            sum(r.explored_nodes for r in successful_results) / len(successful_results), 2
+        ),
+        avg_documents_collected=round(
+            sum(r.documents_collected for r in successful_results) / len(successful_results), 2
+        ),
         total_cost_usd=round(sum(r.estimated_cost_usd for r in results), 4),
-        avg_cost_per_test=round(sum(r.estimated_cost_usd for r in successful_results) / len(successful_results), 4),
+        avg_cost_per_test=round(
+            sum(r.estimated_cost_usd for r in successful_results) / len(successful_results), 4
+        ),
         total_gigachat2_calls=sum(r.gigachat2_calls for r in results),
         total_gigachat3_calls=sum(r.gigachat3_calls for r in results),
-
-        breakdown_by_level=breakdown
+        breakdown_by_level=breakdown,
     )
 
 
@@ -557,11 +489,17 @@ def generate_markdown_report(report: MetricsReport) -> str:
     md.append(f"- **Failed:** {m.failed_tests}\n")
 
     # DeepEval Metrics
-    md.append("## 🎯 DeepEval Metrics\n")
+    md.append("## 🎯 ToT Evaluation Metrics\n")
     md.append("### Average Scores\n")
-    md.append(f"- **Completeness:** {m.avg_completeness:.3f} (min: {m.min_completeness:.3f}, max: {m.max_completeness:.3f})")
-    md.append(f"- **Relevance:** {m.avg_relevance:.3f} (min: {m.min_relevance:.3f}, max: {m.max_relevance:.3f})")
-    md.append(f"- **Quality:** {m.avg_quality:.3f} (min: {m.min_quality:.3f}, max: {m.max_quality:.3f})\n")
+    md.append(
+        f"- **Completeness:** {m.avg_completeness:.3f} (min: {m.min_completeness:.3f}, max: {m.max_completeness:.3f})"
+    )
+    md.append(
+        f"- **Relevance:** {m.avg_relevance:.3f} (min: {m.min_relevance:.3f}, max: {m.max_relevance:.3f})"
+    )
+    md.append(
+        f"- **Quality:** {m.avg_quality:.3f} (min: {m.min_quality:.3f}, max: {m.max_quality:.3f})\n"
+    )
 
     # Performance Metrics
     md.append("## ⚡ Performance Metrics\n")
@@ -593,7 +531,9 @@ def generate_markdown_report(report: MetricsReport) -> str:
 
     # Detailed Results Table
     md.append("## 📋 Detailed Results\n")
-    md.append("| ID | Topic | Level | ✅ | Completeness | Relevance | Quality | Time (s) | Cost ($) | ToT Iter | Docs |")
+    md.append(
+        "| ID | Topic | Level | ✅ | Completeness | Relevance | Quality | Time (s) | Cost ($) | ToT Iter | Docs |"
+    )
     md.append("|---|---|---|---|---|---|---|---|---|---|---|")
 
     for r in report.individual_results:
@@ -618,14 +558,13 @@ def generate_markdown_report(report: MetricsReport) -> str:
     # Footer
     md.append("\n---\n")
     md.append("_Generated by Materials Agent v2 Measurement Script_\n")
+    md.append("_Metrics are extracted from ToT evaluation (evaluation_chain.evaluate_node)_\n")
 
     return "\n".join(md)
 
 
 def save_results(
-    report: MetricsReport,
-    output_dir: Path,
-    test_suite_name: str
+    report: MetricsReport, output_dir: Path, test_suite_name: str
 ) -> tuple[Path, Path]:
     """
     Save results to files.
@@ -642,7 +581,7 @@ def save_results(
 
     # Save JSON
     json_path = output_dir / f"{test_suite_name}_results.json"
-    with open(json_path, "w", encoding="utf-8") as f:
+    with Path(json_path).open("w", encoding="utf-8") as f:
         json.dump(report.model_dump(), f, ensure_ascii=False, indent=2)
 
     logger.info(f"💾 Saved JSON results: {json_path}")
@@ -650,7 +589,7 @@ def save_results(
     # Save Markdown
     md_path = output_dir / f"{test_suite_name}_report.md"
     md_content = generate_markdown_report(report)
-    with open(md_path, "w", encoding="utf-8") as f:
+    with Path(md_path).open("w", encoding="utf-8") as f:
         f.write(md_content)
 
     logger.info(f"📄 Saved Markdown report: {md_path}")
@@ -658,7 +597,7 @@ def save_results(
     # Also save individual results by topic_id
     for result in report.individual_results:
         result_path = output_dir / f"{result.topic_id}_result.json"
-        with open(result_path, "w", encoding="utf-8") as f:
+        with Path(result_path).open("w", encoding="utf-8") as f:
             json.dump(result.model_dump(), f, ensure_ascii=False, indent=2)
 
     logger.info(f"💾 Saved {len(report.individual_results)} individual result files")
@@ -683,7 +622,7 @@ async def main(args: argparse.Namespace) -> None:
         logger.error(f"❌ Test data file not found: {test_data_path}")
         return
 
-    with open(test_data_path, encoding="utf-8") as f:
+    with Path(test_data_path).open(encoding="utf-8") as f:
         test_data = json.load(f)
 
     test_topics = [TestTopic(**topic) for topic in test_data["topics"]]
@@ -697,9 +636,7 @@ async def main(args: argparse.Namespace) -> None:
     test_topics = [test_topics[0]]
 
     results = await run_all_tests(
-        test_topics=test_topics,
-        base_url=args.base_url,
-        delay_between_tests=args.delay
+        test_topics=test_topics, base_url=args.base_url, delay_between_tests=args.delay
     )
 
     total_time = time.time() - start_time
@@ -713,15 +650,13 @@ async def main(args: argparse.Namespace) -> None:
         test_suite=test_data.get("test_suite", "unknown"),
         base_url=args.base_url,
         overall_metrics=aggregated,
-        individual_results=results
+        individual_results=results,
     )
 
     # Save results
     output_dir = Path(args.output)
     json_path, md_path = save_results(
-        report=report,
-        output_dir=output_dir,
-        test_suite_name=test_data.get("test_suite", "test")
+        report=report, output_dir=output_dir, test_suite_name=test_data.get("test_suite", "test")
     )
 
     # Print summary
@@ -748,26 +683,18 @@ if __name__ == "__main__":
         "--test-data",
         type=str,
         default="material-examples/test_topics.json",
-        help="Path to test topics JSON file"
+        help="Path to test topics JSON file",
     )
     parser.add_argument(
         "--output",
         type=str,
         default="material-examples/results",
-        help="Output directory for results"
+        help="Output directory for results",
     )
     parser.add_argument(
-        "--base-url",
-        type=str,
-        default="http://localhost:8000",
-        help="API base URL"
+        "--base-url", type=str, default="http://localhost:8000", help="API base URL"
     )
-    parser.add_argument(
-        "--delay",
-        type=float,
-        default=2.0,
-        help="Delay between tests in seconds"
-    )
+    parser.add_argument("--delay", type=float, default=2.0, help="Delay between tests in seconds")
 
     args = parser.parse_args()
     asyncio.run(main(args))

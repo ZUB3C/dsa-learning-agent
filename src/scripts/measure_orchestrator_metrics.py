@@ -29,7 +29,7 @@ class MetricsResult:
 def load_test_cases() -> list[dict[str, Any]]:
     """Загружает тестовые примеры из JSON."""
     test_data_path = Path(__file__).parent / "test_orchestrator_data.json"
-    with open(test_data_path) as f:
+    with Path(test_data_path).open(encoding="utf-8") as f:
         data = json.load(f)
     return data["test_cases"]
 
@@ -189,7 +189,7 @@ async def run_all_metrics(
     print("\n3. Measuring support session success rate...")
     support_success = measure_support_session_success()
 
-    result = MetricsResult(
+    return MetricsResult(
         classification_accuracy=accuracy,
         success_rate=success_rate,
         partial_rate=partial_rate,
@@ -201,8 +201,6 @@ async def run_all_metrics(
         correct_classifications=correct,
     )
 
-    return result
-
 
 def print_metrics_report(result: MetricsResult) -> None:
     """Выводит красивый отчёт по метрикам."""
@@ -210,20 +208,20 @@ def print_metrics_report(result: MetricsResult) -> None:
     print("METRICS REPORT")
     print("=" * 80)
 
-    print(f"\n📊 Classification Accuracy:")
+    print("\n📊 Classification Accuracy:")
     print(f"   Correct: {result.correct_classifications}/{result.total_requests}")
     print(f"   Accuracy: {result.classification_accuracy:.2f}%")
 
-    print(f"\n📈 Response Status Distribution:")
+    print("\n📈 Response Status Distribution:")
     print(f"   Success: {result.success_rate:.2f}%")
     print(f"   Partial: {result.partial_rate:.2f}%")
     print(f"   Error: {result.error_rate:.2f}%")
 
-    print(f"\n⏱️  Response Time Metrics:")
+    print("\n⏱️  Response Time Metrics:")
     print(f"   Average: {result.avg_response_time_ms:.2f} ms")
     print(f"   95th Percentile: {result.p95_response_time_ms:.2f} ms")
 
-    print(f"\n🤝 Support Agent Metrics:")
+    print("\n🤝 Support Agent Metrics:")
     print(f"   Session Success Rate: {result.support_success_rate:.2f}%")
 
     print("\n" + "=" * 80)

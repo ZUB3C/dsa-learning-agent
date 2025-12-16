@@ -3,7 +3,6 @@
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Any
 
 from sqlalchemy import Boolean, Float, Integer, String, Text, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
@@ -135,7 +134,6 @@ from datetime import datetime
 
 from sqlalchemy import JSON, Boolean, Column, DateTime, Float, Index, Integer, String, Text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.ext.declarative import declarative_base
 
 from src.config import get_settings
 
@@ -379,7 +377,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
 
 
 @contextmanager
-def get_db_session() -> Generator[Session, None, None]:
+def get_db_session() -> Generator[Session]:
     """Контекстный менеджер для работы с БД через SQLAlchemy."""
     session = SessionLocal()
     try:

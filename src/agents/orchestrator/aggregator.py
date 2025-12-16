@@ -1,10 +1,15 @@
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ...models.orchestrator_schemas import (
     ClassificationResult,
     ResolveResponse,
     SupportBlock,
 )
-from .executor import ExecutionResult
+
+if TYPE_CHECKING:
+    from .executor import ExecutionResult
 
 
 class Aggregator:
@@ -72,10 +77,7 @@ class Aggregator:
         # 2. Статус
         if main_res.ok:
             # если основной воркер ок, но support (если был) упал — считаем partial
-            if supp_res is None or supp_res.ok:
-                status = "success"
-            else:
-                status = "partial"
+            status = "success" if supp_res is None or supp_res.ok else "partial"
         else:
             status = "error"
 
@@ -93,6 +95,8 @@ class Aggregator:
             agents_used=exec_result.agents_used,
             execution_time_ms=execution_time_ms,
         )
+
+
 def aggregate(
     exec_result: ExecutionResult,
     cls: ClassificationResult,
