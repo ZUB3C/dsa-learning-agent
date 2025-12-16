@@ -435,12 +435,17 @@ class RateLimitSettings(BaseNestedSettings):
         10, description="GigaChat-2-Max calls/min"
     )
     rate_limit_gigachat_max_tokens_per_hour: int = Field(
-        100000, description="GigaChat-2-Max tokens/hour"
+        500000, description="GigaChat-2-Max tokens/hour"
     )
-    rate_limit_gigachat3_max_calls_per_minute: int = Field(30, description="GigaChat3 calls/min")
+    rate_limit_gigachat3_max_calls_per_minute: int = Field(1000, description="GigaChat3 calls/min")
 
     # Cost Estimation
-    cost_per_1k_tokens_gigachat: float = Field(0.002, description="Cost per 1K tokens")
+    # Converted from 560 RUB/million tokens
+    # Exchange rate: 1 USD = 79.05 RUB (as of December 16, 2025)
+    # Calculation: (560 RUB / 1,000,000 tokens) * 1000 / 79.05 ≈ 0.00708 USD/1K tokens
+    # TODO: calculate cost in rubles instead of USD
+    cost_per_1k_tokens_gigachat: float = Field(0.00708, description="Cost per 1K tokens")
+
     cost_alert_threshold_per_request: float = Field(0.10, description="Cost alert per request")
     cost_alert_threshold_per_hour: float = Field(5.0, description="Cost alert per hour")
 
