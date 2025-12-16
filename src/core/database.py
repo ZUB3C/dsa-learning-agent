@@ -3,6 +3,7 @@
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import Boolean, Float, Integer, String, Text, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
@@ -117,7 +118,7 @@ class SupportSession(Base):
     user_id: Mapped[str] = mapped_column(String, nullable=False)
     user_message: Mapped[str] = mapped_column(Text, nullable=False)
     emotional_state: Mapped[str] = mapped_column(String, nullable=False)
-    response: Mapped[str] = mapped_column(Text, nullable=False)
+    response_content: Mapped[str] = mapped_column(Text, nullable=False)
     recommendations: Mapped[str] = mapped_column(Text, nullable=False)
     helpful: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     comments: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -380,7 +381,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
 
 
 @contextmanager
-def get_db_session() -> Generator[Session]:
+def get_db_session() -> Generator[Session, None, None]:
     """Контекстный менеджер для работы с БД через SQLAlchemy."""
     session = SessionLocal()
     try:
