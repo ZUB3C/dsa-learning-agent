@@ -1,26 +1,30 @@
-================================================================================
-Orchestrator Metrics Measurement
-================================================================================
+# Orchestrator Metrics Measurement
 
 Loaded 8 test cases.
 
 1. Measuring classification accuracy...
+
 ✓ Test 1: materials (4150.0ms)
+
 ✓ Test 2: verification (52300.0ms)
+
 ✓ Test 3: support (2870.0ms)
+
 ✗ Test 4: expected test, got materials
+
 ✓ Test 5: materials (3280.0ms)
+
 ✓ Test 6: support (3520.0ms)
+
 ✓ Test 7: test (134200.0ms)
+
 ✗ Test 8: expected verification, got test
 
 2. Measuring response statuses...
 
 3. Measuring support session success rate...
 
-================================================================================
-METRICS REPORT
-================================================================================
+# METRICS REPORT
 
 📊 Classification Accuracy:
   Correct: 6/8
