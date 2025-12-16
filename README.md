@@ -289,7 +289,7 @@ uv run python -m src.scripts.populate_db --pdf algobook.pdf --clear
 ### 6. Запустить приложение (API)
 
 ```
-uv run python -m src.main
+uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 Откройте документацию Swagger UI:
