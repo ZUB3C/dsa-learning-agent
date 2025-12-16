@@ -219,7 +219,7 @@ class WebSearchSettings(BaseNestedSettings):
 
     # Search Parameters
     web_search_results_limit: int = Field(5, description="Max search results")
-    web_search_timeout_s: float = Field(10.0, description="Web search timeout")
+    web_search_timeout_s: float = Field(60.0, description="Web search timeout")
     web_search_retry_count: int = Field(2, description="Retry count")
 
     # Domain Priorities
