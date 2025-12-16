@@ -1,0 +1,135 @@
+graph TB
+    subgraph "Materials Agent v2 Entry Point"
+        MaterialsAPI[Materials API<br/>POST /api/v1/materials/generate]
+    end
+
+    subgraph "Tree-of-Thoughts Orchestrator"
+        ToTOrch[ToT Orchestrator<br/>DFS поиск]
+        ThoughtGen[Thought Generation<br/>Генерация кандидатов<br/>Запрос: GigaChat-2-Max]
+        PromiseEval[Promise Evaluation<br/>Оценка перспективности<br/>Запрос: GigaChat3]
+        Pruning[Branch Pruning<br/>Отсечение веток]
+        PostEval[Post-Execution Eval<br/>Completeness ≥ 0.85]
+        Backtrack[Backtracking<br/>При тупиках]
+    end
+
+    subgraph "Tools Layer - 6 инструментов"
+        subgraph "RAG Tools"
+            AdaptiveRAG[Adaptive RAG Tool<br/>TF-IDF / Semantic / Hybrid<br/>Запрос: GigaChat3]
+            CorrectiveRAG[Corrective RAG Tool<br/>Проверка релевантности<br/>Запрос: GigaChat3]
+        end
+
+        subgraph "Web Tools"
+            WebSearch[Web Search Tool<br/>4get metasearch engine]
+            WebScraper[Web Scraper Tool<br/>selectolax parser]
+        end
+
+        subgraph "Analysis Tools"
+            ConceptExtract[Concept Extractor<br/>KeyBERT + spaCy]
+            MemoryRetrieval[Memory Retrieval<br/>Procedural Memory]
+        end
+    end
+
+    subgraph "Content Guard Layer"
+        GuardOrch[Content Guard Orchestrator]
+        ToxCheck[Toxicity Checker<br/>Batch processing<br/>Запрос: GigaChat3]
+        PolicyCheck[Policy Compliance<br/>GigaChat правила<br/>Запрос: GigaChat3]
+        Sanitizer[Content Sanitizer<br/>Rule-based фильтры]
+        QualityGate[Quality Gate<br/>100-3000 токенов<br/>3+ параграфа]
+    end
+
+    subgraph "Memory Systems"
+        WorkingMem[Working Memory<br/>ChromaDB<br/>Текущая сессия]
+        ProceduralMem[Procedural Memory<br/>ChromaDB<br/>Успешные паттерны]
+    end
+
+    subgraph "Chain Components"
+        ReasonChain[Reasoning Chain<br/>Запрос: GigaChat-2-Max<br/>Генерация контента]
+        EvalChain[Evaluation Chain<br/>Запрос: GigaChat3<br/>Promise/Quality scores]
+    end
+
+    subgraph "LLM Integration"
+        LLMRouter[LLM Router<br/>Интерфейс к моделям]
+        GigaMax[GigaChat-2-Max]
+        Giga3[GigaChat3-10B]
+    end
+
+    subgraph "Fallback Systems"
+        LLMFallback[LLM Fallback<br/>Retry + backoff]
+        DBFallback[Database Fallback<br/>JSON backup]
+        ChromaFallback[ChromaDB Fallback<br/>Pickle + keyword search]
+    end
+
+    subgraph "External Resources"
+        VectorDB[(ChromaDB<br/>Векторное хранилище)]
+        WebInternet[Internet<br/>Образовательные ресурсы]
+        DB[(SQLite<br/>Результаты генерации)]
+    end
+
+    subgraph "Metrics & Monitoring"
+        DeepEval[DeepEval Metrics<br/>Answer Relevance<br/>Faithfulness<br/>Contextual Relevance<br/>Coherence]
+        Prometheus[Prometheus Exporter<br/>Performance metrics]
+    end
+
+    MaterialsAPI -->|User Request| ToTOrch
+
+    ToTOrch --> ThoughtGen
+    ThoughtGen -->|Запрос GigaChat-2-Max| LLMRouter
+    LLMRouter -->|Возврат модели| GigaMax
+
+    ThoughtGen --> PromiseEval
+    PromiseEval -->|Запрос GigaChat3| LLMRouter
+    LLMRouter -->|Возврат модели| Giga3
+
+    PromiseEval -->|Score < threshold| Pruning
+    PromiseEval -->|Score ≥ threshold| ReasonChain
+
+    ReasonChain -->|Запрос GigaChat-2-Max| LLMRouter
+    ReasonChain --> AdaptiveRAG
+    ReasonChain --> CorrectiveRAG
+    ReasonChain --> WebSearch
+    ReasonChain --> WebScraper
+    ReasonChain --> ConceptExtract
+    ReasonChain --> MemoryRetrieval
+
+    AdaptiveRAG -->|Запрос GigaChat3| LLMRouter
+    CorrectiveRAG -->|Запрос GigaChat3| LLMRouter
+
+    AdaptiveRAG --> VectorDB
+    CorrectiveRAG --> VectorDB
+    WebSearch --> WebInternet
+    WebScraper --> WebInternet
+    MemoryRetrieval --> ProceduralMem
+
+    ReasonChain --> WorkingMem
+
+    ReasonChain --> GuardOrch
+    GuardOrch --> ToxCheck
+    GuardOrch --> PolicyCheck
+    GuardOrch --> Sanitizer
+    GuardOrch --> QualityGate
+
+    ToxCheck -->|Запрос GigaChat3| LLMRouter
+    PolicyCheck -->|Запрос GigaChat3| LLMRouter
+
+    QualityGate --> PostEval
+    PostEval -->|Completeness < 0.85| Backtrack
+    Backtrack --> ThoughtGen
+    PostEval -->|Completeness ≥ 0.85| EvalChain
+
+    EvalChain -->|Запрос GigaChat3| LLMRouter
+    EvalChain --> DB
+    EvalChain --> ProceduralMem
+
+    ThoughtGen -.->|Fallback| LLMFallback
+    PostEval -.->|Fallback| DBFallback
+    VectorDB -.->|Fallback| ChromaFallback
+
+    EvalChain --> DeepEval
+    ToTOrch --> Prometheus
+
+    EvalChain -->|Final Material| MaterialsAPI
+
+    style ToTOrch fill:#E6F3FF,stroke:#0066CC,stroke-width:2px
+    style GuardOrch fill:#FFE6E6,stroke:#CC0000,stroke-width:2px
+    style ReasonChain fill:#E6FFE6,stroke:#00CC00,stroke-width:2px
+    style LLMRouter fill:#FFF9E6,stroke:#FFB800,stroke-width:2px

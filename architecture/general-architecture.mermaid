@@ -1,0 +1,123 @@
+graph TB
+    subgraph "External Client"
+        Client[Client Application]
+    end
+
+    subgraph "АиСД Learning Platform v2"
+        subgraph "REST API Layer - 20+ endpoints"
+            subgraph "System API"
+                Health[GET /health<br/>GET /health/detailed<br/>GET /metrics]
+            end
+
+            subgraph "Orchestrator Endpoint"
+                OrchestratorAPI[POST /api/v1/orchestrator/resolve<br/>Единая точка входа]
+            end
+
+            subgraph "Direct Agent Endpoints"
+                MaterialsAPI[Materials API<br/>5 endpoints]
+                TestsAPI[Tests API<br/>4 endpoints]
+                VerificationAPI[Verification API<br/>2 endpoints]
+                SupportAPI[Support API<br/>2 endpoints]
+            end
+        end
+
+        subgraph "Core Components"
+            Orchestrator[🔗 Orchestrator<br/>Intent Detection & Routing<br/>см. отдельную схему]:::external
+
+            Materials[🔗 Materials Agent v2<br/>Tree-of-Thoughts + RAG<br/>см. отдельную схему]:::external
+
+            TestGen[Test Generation Agent<br/>Персонализированные тесты]
+
+            subgraph "Verification System"
+                VerifAgent[Verification Agent<br/>Первичная проверка<br/>GigaChat3]
+                SecVerif[Secondary Verification<br/>LLM-as-a-Judge<br/>GigaChat-2-Max]
+            end
+
+            Support[Support Agent<br/>Психологическая поддержка<br/>Параллельный запуск]
+        end
+
+        subgraph "RAG System"
+            PDFParser[PDF Parser<br/>LaTeX-PDF]
+            TextSplitter[Text Splitter<br/>Семантическая сегментация]
+            VectorStore[ChromaDB<br/>Vector Store]
+            Embeddings[HuggingFace<br/>Embeddings]
+        end
+
+        subgraph "LLM Layer"
+            LLMRouter[LLM Router<br/>Интерфейс к моделям]
+            GigaMax[GigaChat-2-Max<br/>Сложный reasoning]
+            Giga3[GigaChat3-10B<br/>Быстрые операции]
+        end
+
+        subgraph "Storage"
+            DB[(SQLAlchemy)]
+            VectorDB[(ChromaDB<br/>Векторная БД)]
+        end
+
+        subgraph "Monitoring"
+            Metrics[DeepEval Metrics<br/>Prometheus]
+        end
+    end
+
+    %% Client connections
+    Client -->|Unified access| OrchestratorAPI
+    Client -->|Direct access| MaterialsAPI
+    Client -->|Direct access| TestsAPI
+    Client -->|Direct access| VerificationAPI
+    Client -->|Direct access| SupportAPI
+    Client -->|Monitoring| Health
+
+    %% Orchestrator routing
+    OrchestratorAPI --> Orchestrator
+    Orchestrator -->|Route to| Materials
+    Orchestrator -->|Route to| TestGen
+    Orchestrator -->|Параллельно| Support
+
+    %% Direct API to Agents
+    MaterialsAPI --> Materials
+    TestsAPI --> TestGen
+    VerificationAPI --> VerifAgent
+    SupportAPI --> Support
+
+    %% Agent interactions
+    TestGen --> VerifAgent
+    VerifAgent --> SecVerif
+
+    %% RAG System
+    Materials --> VectorStore
+    PDFParser --> TextSplitter
+    TextSplitter --> Embeddings
+    Embeddings --> VectorStore
+
+    %% LLM Integration
+    Orchestrator -->|Запрос модели| LLMRouter
+    TestGen -->|Запрос GigaChat3| LLMRouter
+    VerifAgent -->|Запрос GigaChat3| LLMRouter
+    SecVerif -->|Запрос GigaChat-2-Max| LLMRouter
+    Support -->|Запрос модели| LLMRouter
+
+    LLMRouter -->|Возврат GigaChat-2-Max| GigaMax
+    LLMRouter -->|Возврат GigaChat3| Giga3
+
+    %% Storage
+    Materials --> DB
+    TestGen --> DB
+    VerifAgent --> DB
+    VectorStore --> VectorDB
+
+    %% Monitoring
+    Health --> Metrics
+    Materials --> Metrics
+    TestGen --> Metrics
+
+    classDef external fill:#FFE4B5,stroke:#FF8C00,stroke-width:3px,color:#000
+    classDef apiEndpoint fill:#E6F3FF,stroke:#0066CC,stroke-width:2px
+
+    style Orchestrator fill:#FFE4B5,stroke:#FF8C00,stroke-width:3px
+    style Materials fill:#FFE4B5,stroke:#FF8C00,stroke-width:3px
+    style Support fill:#E6FFE6,stroke:#00AA00,stroke-width:2px
+    style OrchestratorAPI fill:#E6F3FF,stroke:#0066CC,stroke-width:2px
+    style MaterialsAPI fill:#F0F0F0,stroke:#666666,stroke-width:1px
+    style TestsAPI fill:#F0F0F0,stroke:#666666,stroke-width:1px
+    style VerificationAPI fill:#F0F0F0,stroke:#666666,stroke-width:1px
+    style SupportAPI fill:#F0F0F0,stroke:#666666,stroke-width:1px
