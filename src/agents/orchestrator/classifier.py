@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from ...core.llm import simple_chain
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+
+from ...core.llm import get_llm
 from ...models.orchestrator_schemas import ClassificationResult, TaskType
 
 _SYSTEM_PROMPT = """
@@ -38,14 +41,19 @@ _SYSTEM_PROMPT = """
 
 class RequestClassifier:
     def __init__(self) -> None:
-        self._chain = simple_chain(_SYSTEM_PROMPT)
+        llm = get_llm()
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", _SYSTEM_PROMPT),
+            ("human", "{input}"),
+        ])
+        self._chain = prompt | llm | StrOutputParser()
 
     async def classify(self, message: str) -> ClassificationResult:
         raw = await self._chain.ainvoke({"input": message})
         data: dict[str, Any]
         try:
             data = json.loads(raw)
-        except Exception:
+        except json.JSONDecodeError:
             data = {
                 "task_type": "materials",
                 "include_support": False,
