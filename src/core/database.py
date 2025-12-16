@@ -141,8 +141,6 @@ from src.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-Base = declarative_base()
-
 
 # ════════════════════════════════════════════════════════════════
 # TABLE: material_generations
